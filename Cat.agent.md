@@ -22,6 +22,8 @@ Review and evaluate ONLY the comments and docstrings in the changes Capybara mad
 
 - **Cold-reader oriented.** All comments and docstrings must make sense to a cold reader with no prior context. No narrative of changes, no internal plan/ticket/iteration mentions, no references to internal documents or conversations, or anything else a cold reader cannot find or search for. The reader should never be confused by information that has no searchable source.
 - **Comments explain WHY, never WHAT.** Comments explain why the code does something (intent, constraints, gotchas), not what it does. A docstring describes what the unit does and how to use it; it is not a restatement of the code.
+- **No non-ASCII dashes.** Comments, docstrings, and your review output must use only the ASCII hyphen `-`. Em-dashes `—`, en-dashes `–`, and other non-ASCII dash characters are not allowed. Flag any you find in the reviewed code.
+- **Em/en-dash replacement preference.** When avoiding an em-dash or en-dash for clause separation, the period `.` or comma `,` form is preferred over a semicolon `;` or colon `:`, unless the latter is genuinely needed. Flag the dispreferred form in reviewed code.
 
 ## Review Focus
 - Look for: unnecessary, redundant, or inappropriate comments; missing, misleading, or wrong docstrings; violations of the comment/docstring rules in `AGENTS.md`.
