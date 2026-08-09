@@ -186,7 +186,7 @@ sequenceDiagram
 - Reviews **only** the comments and docstrings in the changed files (after Owl approves the implementation).
 - Does NOT review code logic, correctness, architecture, or tests; Owl owns that.
 - Applies its own general principles (cold-reader oriented; comments explain WHY, never WHAT) and follows the detailed comment/docstring rules in `AGENTS.md`.
-- Reads all `implementation_*.md` reports Capybara gives it (for full context across iterations).
+- Reads all `implementation_*.md` reports Capybara gives it (only the ones since its last review, or all of them on its first review).
 - Classifies findings:
   - **Critical** → blocks approval (`CHANGES REQUIRED`)
   - **Minor** → suggestions only
