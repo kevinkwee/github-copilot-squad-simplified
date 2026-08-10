@@ -106,18 +106,18 @@ For technical requests, `Capybara` runs this loop. **In Trio, this loop is skipp
 2. Implement the task and write `implementation_1.md` into that folder.
 3. Hand off to `Owl` (focused handoff: the implementation report path, not the whole conversation).
 4. If `Owl` returns **APPROVED** → in Trio, proceed to section 3 (the Cat loop); in Duo, return the final result.
-5. If `Owl` returns **CHANGES REQUIRED** → apply every Critical fix, re-run tests, increment the iteration, write a fresh `implementation_{iteration}.md`, and call `Owl` again.
+5. If `Owl` returns **CHANGES REQUIRED** → apply every Critical fix, re-run tests, write a fresh `implementation_{iteration}.md` (next number), and call `Owl` again (Owl writes `review_{iteration}.md` with that same number).
 6. Repeat until approved, max 5 iterations.
 
 If still not approved after 5 iterations, `Capybara` stops and surfaces the remaining Critical issues for the user to decide (the Cat loop is skipped).
 
 ### 3) Comment & docstring review loop (Capybara ↔ Cat, Trio only)
 
-Trio mode runs a second, focused loop with `Cat`. For regular technical requests it runs after Owl approves. For comment/docstring-only requests it runs right after implementation (Owl was skipped). The iteration counter continues and is not reset (it starts at 1 from the implementation report when Owl was skipped):
+Trio mode runs a second, focused loop with `Cat`. For regular technical requests it runs after Owl approves. For comment/docstring-only requests it runs right after implementation (Owl was skipped). Cat's review number always equals the `implementation_*.md` number it reviews, so when Owl approves `implementation_N.md`, Cat writes `docstring_review_N.md` (no increment between Owl and Cat):
 
-1. Hand off to `Cat` (focused handoff: the latest implementation report path, the report subfolder, and the current iteration number). `Cat` reviews only comments and docstrings and writes `docstring_review_{iteration}.md`.
+1. Hand off to `Cat` (focused handoff: the report subfolder, the number N of the latest `implementation_*.md`, and every `implementation_*.md` Cat has not reviewed yet). At the Owl-to-Cat transition Cat is handed `implementation_1.md`..`implementation_N.md` (all of them, since this is its first review) but writes a single `docstring_review_{N}.md`. "Handed" scopes the handoff, not Cat's tool access. Cat can read more from disk if it needs extra context.
 2. If `Cat` returns **APPROVED** → return the final result.
-3. If `Cat` returns **CHANGES REQUIRED** → apply every Critical fix (and any cheap minor suggestions), re-run tests/lint if code is touched, increment the iteration, write a fresh `implementation_{iteration}.md`, and call `Cat` again.
+3. If `Cat` returns **CHANGES REQUIRED** → apply every Critical fix (and any cheap minor suggestions), re-run tests/lint if code is touched, write a fresh `implementation_{iteration}.md` (next number), and call `Cat` again (Cat writes `docstring_review_{iteration}.md` with that same number).
 4. Repeat until approved, max 5 iterations.
 
 If still not approved after 5 iterations, `Capybara` stops and surfaces the remaining Critical issues for the user to decide.
@@ -192,7 +192,7 @@ sequenceDiagram
 - Reviews **only** the comments and docstrings in the changed files (after Owl approves the implementation).
 - Does NOT review code logic, correctness, architecture, or tests; Owl owns that.
 - Applies its own general principles (cold-reader oriented; comments explain WHY, never WHAT) and follows the detailed comment/docstring rules in `AGENTS.md`.
-- Reads all `implementation_*.md` reports Capybara gives it (only the ones since its last review, or all of them on its first review).
+- Reads all `implementation_*.md` reports Capybara hands it (at the Owl-to-Cat transition, all of `implementation_1.md`..`implementation_N.md`; on later re-reviews, only the new `implementation_*.md` since its last `docstring_review_*.md`) and writes a single `docstring_review_{iteration}.md` per call. The handed reports scope the review, not what Cat may read. Cat can read more from disk if it needs extra context.
 - Classifies findings:
   - **Critical** → blocks approval (`CHANGES REQUIRED`)
   - **Minor** → suggestions only

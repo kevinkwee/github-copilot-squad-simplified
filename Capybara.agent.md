@@ -44,13 +44,13 @@ You are Capybara. You are the **entry point** for user requests and the **implem
 6. **Code review loop (max 5 iterations)**: implement → call Owl → apply findings → re-review. **Skip this loop for comment/docstring-only requests** (go straight to step 7). A request is comment/docstring-only when the ONLY changes it asks for are to comments and/or docstrings, with no code logic, behavior, test, or config changes. If during implementation you find the work actually requires any non-prose change (code logic, behavior, test, or config), reclassify it as a regular technical request and run this loop. Run this loop:
    - Call Owl via #tool:agent/runSubagent with a focused handoff (see [Handoff to Owl](#handoff-to-owl)).
    - If Owl returns **APPROVED** → exit the loop and go to step 7.
-   - If Owl returns **CHANGES REQUIRED** → apply every Critical fix Owl raises, re-run tests, then increment the iteration number and call Owl again. Write a fresh `implementation_{iteration}.md` for each iteration (do not overwrite earlier ones).
+   - If Owl returns **CHANGES REQUIRED** → apply every Critical fix Owl raises, re-run tests, then write a fresh `implementation_*.md` (next number; do not overwrite earlier ones) and call Owl to review it. Owl writes `review_*.md` with that same number.
    - If 5 review iterations pass without APPROVED → exit the loop and go to step 8 with the latest Owl feedback (skip the Cat loop; surface Owl's remaining issues to the user).
    Do not call Owl after a CHANGES REQUIRED unless you actually applied fixes. An empty re-review wastes an iteration.
-7. **Comment & docstring review loop (max 5 iterations)**: call Cat → apply findings → re-review. For comment/docstring-only requests, run this loop right after step 5 (Owl was skipped). For other requests, run it after Owl APPROVED. This loop has its own max-5 budget; the iteration counter (used for file naming) starts at 1 from the implementation report written in step 5, continues from the Owl loop when that loop ran, and is not reset between loops. Run this loop:
-   - Call Cat via #tool:agent/runSubagent with a focused handoff (see [Handoff to Cat](#handoff-to-cat)). Pass the report subfolder path and the current iteration number; Cat reads only the `implementation_*.md` files it has NOT reviewed yet and writes `docstring_review_{iteration}.md`.
+7. **Comment & docstring review loop (max 5 iterations)**: call Cat → apply findings → re-review. For comment/docstring-only requests, run this loop right after step 5 (Owl was skipped). For other requests, run it after Owl APPROVED. This loop has its own max-5 budget. The review number always equals the number of the `implementation_*.md` under review (see [Sub-agent Report File Naming](#sub-agent-report-file-naming)). There is no increment between Owl and Cat. Run this loop:
+   - Call Cat via #tool:agent/runSubagent with a focused handoff (see [Handoff to Cat](#handoff-to-cat)). Pass the report subfolder path and the number N of the latest `implementation_*.md`; Cat is handed every `implementation_*.md` it has NOT reviewed yet (at the Owl-to-Cat transition, all of `implementation_1.md`..`implementation_N.md`) and writes a single `docstring_review_{N}.md` (one report, same number as the latest implementation report). "Handed" means the scope of the handoff, not a limit on what Cat may read. Cat can read more from disk if it needs extra context. See [Sub-agent Report File Naming](#sub-agent-report-file-naming) for the full trace.
    - If Cat returns **APPROVED** → exit the loop and go to step 8.
-   - If Cat returns **CHANGES REQUIRED** → apply every Critical fix Cat raises (and any cheap minor suggestions), re-run tests/lint if the changes touch code, then increment the iteration number, write a fresh `implementation_{iteration}.md`, and call Cat again.
+   - If Cat returns **CHANGES REQUIRED** → apply every Critical fix Cat raises (and any cheap minor suggestions), re-run tests/lint if the changes touch code, then write a fresh `implementation_*.md` (next number) and call Cat to review it. Cat writes `docstring_review_*.md` with that same number.
    - If 5 review iterations pass without APPROVED → exit the loop and go to step 8 with the latest Cat feedback.
    Do not call Cat after a CHANGES REQUIRED unless you actually applied fixes. An empty re-review wastes an iteration.
 8. **Report**: tell the user what was done, what Owl and Cat approved or flagged, and the report folder path. If either loop hit its 5-iteration cap without APPROVED, surface the remaining Critical issues from that reviewer's last review and stop.
@@ -74,7 +74,8 @@ Cat is stateless. It gets only what you pass in the `runSubagent` prompt plus wh
 - The original user request (verbatim).
 - A one-line summary that this is the comment/docstring review pass.
 - Paths to only the `implementation_*.md` files Cat has NOT reviewed yet. Find the highest-numbered `docstring_review_*.md` in the subfolder. Let `resume` be the iteration number in its filename, and pass `implementation_{resume+1}.md` through `implementation_{current}.md`. If no `docstring_review_*.md` exists yet (Cat's first review in this subfolder), pass all implementation reports from iteration 1 to the current iteration. Pass file paths; Cat reads them from disk. (Cat gets a range, not Owl's single latest report, because it reads every implementation report since its last review, or all of them on its first review.)
-- The report subfolder path and the current iteration number (Cat writes `docstring_review_{iteration}.md` there).
+  - "Only" scopes the handoff (what Capybara passes and what Cat is expected to review), not Cat's tool access. Cat still has `read`, `search`, and `execute`. If it needs more context to evaluate a comment or docstring (a prior `review_*.md`, an earlier `implementation_*.md` it was not handed, or any code file), it reads that from disk itself.
+- The report subfolder path and the number N of the latest `implementation_*.md` (Cat writes a single `docstring_review_{N}.md` there, same number as the latest implementation report. Cat may read multiple `implementation_*.md` files at the transition but always writes one report per call).
 - Any specific areas you want Cat to scrutinize (e.g. new public docstrings, heavily commented sections).
 - A reminder that the comment/docstring rules in `AGENTS.md` apply.
 
@@ -84,11 +85,19 @@ Do NOT dump the entire conversation history. Do NOT re-forward Cat's prior `docs
 
 Report subfolder: `.github/temp_reports/{YYYYMMDD_HHmmss}_{objective}/`.
 
-- Capybara writes `implementation_{iteration}.md` (iteration starts at 1 and continues across both review loops; do not reset it between Owl and Cat).
-- Owl writes `review_{iteration}.md`.
-- Cat writes `docstring_review_{iteration}.md`.
+- Capybara writes `implementation_{iteration}.md` (starts at 1, increments by 1 each time fixes are applied and a fresh report is written).
+- A reviewer's report number always equals the number of the `implementation_*.md` it reviews: Owl writes `review_{iteration}.md`, Cat writes `docstring_review_{iteration}.md`, each with the same number as the implementation report. When Owl APPROVES `implementation_N.md`, Cat's first review is `docstring_review_N.md` against that same `implementation_N.md`. There is no increment between Owl and Cat.
 
-No agent name in the filename. Examples: `implementation_1.md`, `review_1.md`, `implementation_2.md`, `review_2.md`, `docstring_review_2.md`.
+No agent name in the filename. Cat writes no report during the Owl loop. At the Owl-to-Cat transition, Cat reads every `implementation_*.md` it has not reviewed yet (on its first review, all of `implementation_1.md` through `implementation_N.md`) but writes a single `docstring_review_N.md` for the iteration Owl approved. On each later Cat re-review, Cat reads only the `implementation_*.md` files written since its last `docstring_review_*.md` and writes one `docstring_review_K.md`.
+
+Example (regular technical request; Owl CHANGES at 1 and 2, APPROVES at 3; Cat CHANGES at 3 and 4, APPROVES at 5):
+- Iteration 1 → `implementation_1.md`, `review_1.md`
+- Iteration 2 → `implementation_2.md`, `review_2.md`
+- Iteration 3 → `implementation_3.md`, `review_3.md`, `docstring_review_3.md` (Cat's first review: reads `implementation_1.md`..`implementation_3.md`, writes one `docstring_review_3.md`)
+- Iteration 4 → `implementation_4.md`, `docstring_review_4.md` (Cat re-review: reads only `implementation_4.md`)
+- Iteration 5 → `implementation_5.md`, `docstring_review_5.md` (Cat re-review: reads only `implementation_5.md`)
+
+Comment/docstring-only request (Owl skipped, Cat runs from iteration 1): each iteration K → `implementation_K.md`, `docstring_review_K.md`. Cat's first review at K=1 reads `implementation_1.md`, later re-reviews read only the new `implementation_K.md`.
 
 **Scope rule:** You may only modify files inside the report subfolder you create in the current run. All other existing `temp_reports` subfolders and files (from other agents or prior runs) are read-only to you. Never modify, overwrite, rename, or delete them. If a review needs to reference a prior report, read it; do not edit it.
 

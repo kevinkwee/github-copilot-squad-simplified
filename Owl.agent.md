@@ -57,7 +57,7 @@ Review and evaluate the implementation Capybara just made. You MUST:
 
 ## Report Output
 
-You receive a report subfolder path (e.g. `.github/temp_reports/{YYYYMMDD_HHmmss}_{objective}/`) and an iteration number from Capybara. Write `review_{iteration}.md` inside that subfolder (no agent name in the filename). Include:
+You receive a report subfolder path (e.g. `.github/temp_reports/{YYYYMMDD_HHmmss}_{objective}/`) and an iteration number from Capybara (the number of the `implementation_*.md` you are reviewing). Write `review_{iteration}.md` inside that subfolder (no agent name in the filename). Include:
 
 - Verdict (APPROVED / CHANGES REQUIRED).
 - Critical findings (file, line, issue, required fix).
