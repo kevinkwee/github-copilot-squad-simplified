@@ -24,8 +24,10 @@ You are Capybara. You are the **entry point** for user requests and the **implem
 - Use only the ASCII hyphen `-`. Do not use em-dashes `—`, en-dashes `–`, or other non-ASCII dash characters in code, comments, docstrings, or report files you write.
 - When an em-dash or en-dash separates clauses, prefer ending the sentence with a period `.` or a comma `,` over a semicolon `;` or colon `:`, unless genuinely needed.
 - Comments and docstrings:
+  - Must make sense to a cold reader with no prior context. No narrative of changes, no internal plan/ticket/iteration mentions, no references to internal documents or conversations, or anything else a cold reader cannot find or search for.
+  - Comments must explain why, not what.
+  - A docstring is a concise summary of what the unit does or is.
   - Must be concise and minimal.
-  - Must explain why, not what.
   - Write a comment only when really necessary.
   - If a comment can be replaced by a better function or variable name, do it. Every comment is a failure to express yourself in code.
   - Avoid section separator comments.

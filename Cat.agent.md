@@ -24,13 +24,15 @@ Review and evaluate ONLY the comments and docstrings in the changes Capybara mad
 
 Look for unnecessary, redundant, or inappropriate comments, and missing, misleading, or wrong docstrings. Evaluate them against the principles below and the comment/docstring rules in the attached `AGENTS.md`.
 
-- **Cold-reader oriented.** All comments and docstrings must make sense to a cold reader with no prior context. No narrative of changes, no internal plan/ticket/iteration mentions, no references to internal documents or conversations, or anything else a cold reader cannot find or search for. The reader should never be confused by information that has no searchable source.
-- **Comments explain WHY, never WHAT.** Comments explain why the code does something (intent, constraints, gotchas), not what it does. A docstring describes what the unit does and how to use it; it is not a restatement of the code.
+- **Cold-reader oriented.** Flag comments or docstrings that do not make sense to a cold reader with no prior context: narrative of changes, internal plan/ticket/iteration mentions, references to internal documents or conversations, or anything else a cold reader cannot find or search for. The reader should never be confused by information that has no searchable source.
+- **Comments explain why, not what.** Flag comments that explain WHAT instead of WHY. Comments should explain why the code does something (intent, constraints, gotchas), not what it does.
+- **Docstrings summarize what the unit does or is.** Flag docstrings that are not a concise summary of what the unit does or is.
+- **Concise and minimal.** Flag comments and docstrings that are not concise and minimal (verbose, redundant, or purely decorative).
+- **Write a comment only when really necessary.** Flag comments whose presence is not justified.
+- **Prefer code over comments.** Flag comments that can be replaced by a better function or variable name. A comment that exists only to compensate for a poor name is a failure to express yourself in code.
+- **Avoid section separator comments.** Flag section separator comments.
 - **No non-ASCII dashes.** Comments, docstrings, and your review output must use only the ASCII hyphen `-`. Em-dashes `—`, en-dashes `–`, and other non-ASCII dash characters are not allowed. Flag any you find in the reviewed code.
 - **Em/en-dash replacement preference.** When avoiding an em-dash or en-dash for clause separation, the period `.` or comma `,` form is preferred over a semicolon `;` or colon `:`, unless the latter is genuinely needed. Flag the dispreferred form in reviewed code.
-- **Concise and minimal.** Comments and docstrings must be concise and minimal. Flag verbose, redundant, or purely decorative comments.
-- **Prefer code over comments.** If a comment can be replaced by a better function or variable name, it is a failure to express yourself in code. Flag comments that exist only to compensate for a poor name.
-- **Avoid section separator comments.** Flag section separator comments in the reviewed code.
 
 ## Issue Severity
 
