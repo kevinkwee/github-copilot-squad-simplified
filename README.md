@@ -32,7 +32,9 @@ The original concern with merging was that **the context window would fill up qu
 
 Agents sometimes write unnecessary, redundant, or inappropriate comments and docstrings, even when the rules are already stated in `AGENTS.md`. Owl's review covers this, but Owl also reviews the code implementation, so these prose issues sometimes get skipped in practice.
 
-The Trio mode adds **Cat**, a reviewer that focuses **only** on comments and docstrings. It runs after Owl approves the implementation, so the code is already correct; Cat's whole job is to groom the prose. The expected comment/docstring rules live in `AGENTS.md`, so they stay easy to update and maintain.
+The Trio mode adds **Cat**, a reviewer that focuses **only** on comments and docstrings. It runs after Owl approves the implementation (or directly for comment/docstring-only requests), so the code is already correct; Cat's whole job is to groom the prose. The expected comment/docstring rules live in `AGENTS.md`, so they stay easy to update and maintain.
+
+Because Cat owns the prose review, Trio also lets Capybara skip Owl and call Cat directly for **comment/docstring-only requests** (changes that touch only comments and/or docstrings), avoiding a redundant code-logic review pass when there is no logic change to review.
 
 ## The team (two modes)
 
@@ -91,13 +93,14 @@ This makes them available across your workspaces.
 
 `Capybara` receives every request directly. There is no router and no lightweight helper; it handles both technical and simple/non-technical requests itself:
 
-- **Technical request** → investigate, plan, implement, verify, then enter the code review loop with Owl.
+- **Regular technical request** → investigate, plan, implement, verify, then enter the code review loop with Owl (and, in Trio, the Cat loop after).
+- **Comment/docstring-only request** (Trio) → investigate, plan, implement, verify, then skip Owl and go straight to the Cat loop, since Owl reviews code logic and there is no logic change to review.
 - **Simple / non-technical request** → answer directly (no review needed).
 - **Ambiguous request** → asks a clarification question first.
 
 ### 2) Code review loop (Capybara ↔ Owl)
 
-For technical requests, `Capybara` runs this loop:
+For technical requests, `Capybara` runs this loop. **In Trio, this loop is skipped for comment/docstring-only requests** (Capybara goes straight to the Cat loop in section 3, since there is no code logic to review):
 
 1. Create report folder path: `.github/temp_reports/{YYYYMMDD_HHmmss}_{objective}/`
 2. Implement the task and write `implementation_1.md` into that folder.
@@ -110,7 +113,7 @@ If still not approved after 5 iterations, `Capybara` stops and surfaces the rema
 
 ### 3) Comment & docstring review loop (Capybara ↔ Cat, Trio only)
 
-After Owl approves, Trio mode runs a second, focused loop with `Cat` (the iteration counter continues; it is not reset):
+Trio mode runs a second, focused loop with `Cat`. For regular technical requests it runs after Owl approves. For comment/docstring-only requests it runs right after implementation (Owl was skipped). The iteration counter continues and is not reset (it starts at 1 from the implementation report when Owl was skipped):
 
 1. Hand off to `Cat` (focused handoff: the latest implementation report path, the report subfolder, and the current iteration number). `Cat` reviews only comments and docstrings and writes `docstring_review_{iteration}.md`.
 2. If `Cat` returns **APPROVED** → return the final result.
@@ -134,11 +137,13 @@ sequenceDiagram
     C-->>U: Direct response
   else Technical implementation
     C->>C: Investigate, plan, implement, verify
-    loop Until Owl APPROVED (max 5 iterations)
-      C->>W: Code review handoff (implementation report path)
-      W-->>C: APPROVED or CHANGES REQUIRED
-      alt CHANGES REQUIRED
-        C->>C: Apply Critical fixes, re-run tests
+    opt Skipped for comment/docstring-only requests
+      loop Until Owl APPROVED (max 5 iterations)
+        C->>W: Code review handoff (implementation report path)
+        W-->>C: APPROVED or CHANGES REQUIRED
+        alt CHANGES REQUIRED
+          C->>C: Apply Critical fixes, re-run tests
+        end
       end
     end
     loop Until Cat APPROVED (max 5 iterations)
@@ -161,6 +166,7 @@ sequenceDiagram
 - Single entry point: receives requests and acts on them directly.
 - Does the technical work: investigate, plan, implement, run tests, lint/format.
 - Manages the Capybara ↔ Owl code review loop, then the Capybara ↔ Cat comment/docstring loop (each max 5 iterations).
+- For comment/docstring-only requests (Trio), skips the Owl loop and goes straight to the Cat loop.
 - Applies **all** Critical findings from Owl and Cat; never skips them by reasoning them away.
 - Asks clarifying questions (with freeform input) when the request is ambiguous.
 - User-invocable; `disable-model-invocation: true` (so it always runs as the explicit entry point).
@@ -210,7 +216,7 @@ A separate `AGENTS.md` is **easier to update and maintain**, especially when it 
 | Implementation | Offloaded to a separate agent (`Otter`) | Done by Capybara itself | Done by Capybara itself |
 | Simple / non-technical | Handled by a lightweight helper (`Squirrel`) | Handled by Capybara directly | Handled by Capybara directly |
 | Code review | Owl | Owl | Owl |
-| Comment/docstring review | Part of Owl's review | Cat (dedicated pass after Owl) | Part of Owl's review |
+| Comment/docstring review | Part of Owl's review | Cat (dedicated pass, after Owl or directly for comment/docstring-only) | Part of Owl's review |
 | Context per request | Fresh isolated context for each implementation | Warm, carry-over context between follow-ups | Warm, carry-over context between follow-ups |
 | Handoffs | More (router → builder → reviewer) | Fewer (builder+orchestrator → Owl → Cat) | Fewest (builder+orchestrator → Owl) |
 | Best for | Specialized implementers, strict context isolation | Generalist implementer, iterative multi-step work, clean docs | Generalist implementer, minimal review overhead |
