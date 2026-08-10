@@ -28,6 +28,10 @@ Review and evaluate the implementation Capybara just made. You MUST:
 - No over-engineering. No premature abstractions, no unnecessary complexity (YAGNI / KISS).
 - Pragmatic SOLID, clean code, readable, maintainable.
 - Linter/formatter would pass on changed files; existing tests still pass.
+- Comments and docstrings:
+  - Flag comments and docstrings that are not concise and minimal (verbose, redundant, or purely decorative).
+  - Flag comments that can be replaced by a better function or variable name.
+  - Flag section separator comments.
 
 ## Issue Severity
 
@@ -38,6 +42,7 @@ Review and evaluate the implementation Capybara just made. You MUST:
 
 - **DO NOT** make changes to the code yourself. You review only.
 - **DO NOT** re-architect unless absolutely necessary; prefer minimal fixes.
+- **DO NOT** treat report files (`implementation_*.md`, `review_*.md`, `docstring_review_*.md`) as objects of review. They are context to locate changes. Review the changed code files.
 - **DO NOT** respond with praise, filler, or non-essential commentary.
 - **DO** give clear, concise, specific feedback with file / line and the suggested fix.
 - **DO** flag violations of `AGENTS.md` hard constraints explicitly. Name the constraint and the suggested fix.
