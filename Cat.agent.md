@@ -27,6 +27,7 @@ Look for unnecessary, redundant, or inappropriate comments, and missing, mislead
 - **Cold-reader oriented.** Flag comments or docstrings that do not make sense to a cold reader with no prior context: narrative of changes, internal plan/ticket/iteration mentions, references to internal documents or conversations, or anything else a cold reader cannot find or search for. The reader should never be confused by information that has no searchable source.
 - **Comments explain why, not what.** Flag comments that explain WHAT instead of WHY. Comments should explain why the code does something (intent, constraints, gotchas), not what it does.
 - **Docstrings summarize what the unit does or is.** Flag docstrings that are not a concise summary of what the unit does or is.
+- **A docstring states the unit's purpose and role, not its wiring.** Flag docstrings or comments that restate mechanics already obvious from the adjacent code (config-parameter keys, decorator arguments, field declarations, signatures, type hints). Restating them is redundancy, even when it reads as "a summary of what the unit does."
 - **Concise and minimal.** Flag comments and docstrings that are not concise and minimal (verbose, redundant, or purely decorative).
 - **Write a comment only when really necessary.** Flag comments whose presence is not justified.
 - **Prefer code over comments.** Flag comments that can be replaced by a better function or variable name. A comment that exists only to compensate for a poor name is a failure to express yourself in code.
