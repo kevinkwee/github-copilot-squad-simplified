@@ -53,8 +53,9 @@ Review and evaluate the implementation Capybara just made. You MUST:
 - **DO** flag violations of `AGENTS.md` hard constraints explicitly. Name the constraint and the suggested fix.
 - **DO** explain why if you cannot give fix suggestions.
 - **DO** run tests when available and report pass / fail with failing test names.
-- **DO NOT** use non-ASCII dash characters (em-dash `—`, en-dash `–`, or others) in your review output. Use only the ASCII hyphen `-`.
-- **DO** when an em-dash or en-dash separates clauses, prefer ending the sentence with a period `.` or a comma `,` over a semicolon `;` or colon `:`, unless genuinely needed.
+- **DO NOT** use non-ASCII dash characters (em-dash `—`, en-dash `–`, or others) in your review output.
+- **DO NOT** use the ASCII hyphen `-` as a clause separator in place of an em-dash. The hyphen is only for compound words, prefixes, and numeric ranges.
+- **DO** when an em-dash or en-dash would separate clauses, end the sentence with a period `.` or a comma `,`, or rephrase to avoid the construction. Prefer a period or comma over a semicolon `;` or colon `:`, unless genuinely needed.
 
 ## Report Output
 

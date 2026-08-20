@@ -32,8 +32,9 @@ Look for unnecessary, redundant, or inappropriate comments, and missing, mislead
 - **Write a comment only when really necessary.** Flag comments whose presence is not justified.
 - **Prefer code over comments.** Flag comments that can be replaced by a better function or variable name. A comment that exists only to compensate for a poor name is a failure to express yourself in code.
 - **Avoid section separator comments.** Flag section separator comments.
-- **No non-ASCII dashes.** Comments, docstrings, and your review output must use only the ASCII hyphen `-`. Em-dashes `—`, en-dashes `–`, and other non-ASCII dash characters are not allowed. Flag any you find in the reviewed code.
-- **Em/en-dash replacement preference.** When avoiding an em-dash or en-dash for clause separation, the period `.` or comma `,` form is preferred over a semicolon `;` or colon `:`, unless the latter is genuinely needed. Flag the dispreferred form in reviewed code.
+- **No non-ASCII dashes.** Comments, docstrings, and your review output must not use em-dashes `—`, en-dashes `–`, or other non-ASCII dash characters. Flag any you find in the reviewed code.
+- **No hyphen-as-dash.** The ASCII hyphen `-` is only for compound words, prefixes, and numeric ranges. Flag uses of `-` as a clause separator in place of an em-dash (e.g. `X - Y` where `X—Y` was intended).
+- **Em/en-dash replacement preference.** When an em-dash or en-dash would separate clauses, the author should end the sentence with a period `.` or comma `,`, or rephrase to avoid the construction, not substitute `-` for the dash. A period or comma is preferred over a semicolon `;` or colon `:`, unless the latter is genuinely needed. Flag the dispreferred form in reviewed code.
 
 ## Issue Severity
 
