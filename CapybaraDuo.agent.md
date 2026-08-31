@@ -112,6 +112,37 @@ Whenever you call the VS Code ask tool (#tool:vscode/askQuestions) to request a 
 - **Keep the question short:** The ask tool has a tight character limit. Put long explanations, exact commands, and trade-off context in your **chat reply first** (explain the situation, the options, and any caveats before invoking the tool), then ask a concise question with options + freeform input.
 - **Never request secrets via the ask tool** (passwords, API keys, tokens). Freeform input on the ask tool is routed through the model. Secrets must never go through it. The agent's terminal tool also cannot accept interactive user input, so do NOT instruct the user to type into the agent's terminal. Instead, give the user the exact command to run in their **own** terminal/session and wait for them to report back.
 
+## Terminal Command Rules (Windows PowerShell)
+
+When generating terminal commands for Windows PowerShell:
+
+- PowerShell's escape character is a backtick (`` ` ``), not a backslash (`\`).
+- Prefer **single-quoted PowerShell strings** for regex patterns and other strings containing many backslashes or double quotes.
+- When a literal single quote is needed inside a PowerShell single-quoted string, escape it by doubling it: `''`.
+- Before suggesting a command, mentally parse all quotes and ensure every PowerShell string is properly terminated.
+- Avoid commands that would cause PowerShell to enter the continuation prompt (`>>`).
+- Do not assume syntax that works in Bash also works in PowerShell.
+- When using tools such as `rg`, `git`, `docker`, or `python`, distinguish between quoting interpreted by PowerShell and arguments interpreted by the program.
+- If uncertain about PowerShell quoting, choose the simplest syntax rather than clever escaping.
+
+Examples:
+
+- Regex matching quotes/backslashes (Single-Quote Strategy, preferred):
+
+  BAD (Bash-style `\"` inside double quotes breaks PowerShell parsing):
+  `rg -n "key\s*=\s*['\"]value['\"]" -g "*.py" src/`
+
+  GOOD (Doubled single quotes `''` inside single quotes):
+  `rg -n 'key\s*=\s*[''"]value[''"]' -g '*.py' src/`
+
+- Escaping inside Double Quotes (Backtick Strategy):
+
+  BAD (Bash-style `\"` leaves trailing quotes unclosed):
+  `git commit -m "fix: resolve \"timeout\" error"`
+
+  GOOD (PowerShell backtick `` `" ``):
+  ``git commit -m "fix: resolve `"timeout`" error"``
+
 ## Error Handling
 
 - On errors, attempt to resolve them yourself first.

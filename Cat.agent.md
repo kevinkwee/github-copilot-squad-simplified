@@ -51,6 +51,37 @@ Look for unnecessary, redundant, or inappropriate comments, and missing, mislead
 - **DO** flag violations of `AGENTS.md` comment/docstring rules explicitly: name the rule and the suggested fix.
 - **DO** explain why if you cannot give a fix suggestion.
 
+## Terminal Command Rules (Windows PowerShell)
+
+When generating terminal commands for Windows PowerShell:
+
+- PowerShell's escape character is a backtick (`` ` ``), not a backslash (`\`).
+- Prefer **single-quoted PowerShell strings** for regex patterns and other strings containing many backslashes or double quotes.
+- When a literal single quote is needed inside a PowerShell single-quoted string, escape it by doubling it: `''`.
+- Before suggesting a command, mentally parse all quotes and ensure every PowerShell string is properly terminated.
+- Avoid commands that would cause PowerShell to enter the continuation prompt (`>>`).
+- Do not assume syntax that works in Bash also works in PowerShell.
+- When using tools such as `rg`, `git`, `docker`, or `python`, distinguish between quoting interpreted by PowerShell and arguments interpreted by the program.
+- If uncertain about PowerShell quoting, choose the simplest syntax rather than clever escaping.
+
+Examples:
+
+- Regex matching quotes/backslashes (Single-Quote Strategy, preferred):
+
+  BAD (Bash-style `\"` inside double quotes breaks PowerShell parsing):
+  `rg -n "key\s*=\s*['\"]value['\"]" -g "*.py" src/`
+
+  GOOD (Doubled single quotes `''` inside single quotes):
+  `rg -n 'key\s*=\s*[''"]value[''"]' -g '*.py' src/`
+
+- Escaping inside Double Quotes (Backtick Strategy):
+
+  BAD (Bash-style `\"` leaves trailing quotes unclosed):
+  `git commit -m "fix: resolve \"timeout\" error"`
+
+  GOOD (PowerShell backtick `` `" ``):
+  ``git commit -m "fix: resolve `"timeout`" error"``
+
 ## Report Output
 
 You receive a report subfolder path (e.g. `.github/temp_reports/{YYYYMMDD_HHmmss}_{objective}/`) and an iteration number from Capybara (the number of the `implementation_*.md` you are reviewing). Write `docstring_review_{iteration}.md` inside that subfolder (no agent name in the filename). Include:
