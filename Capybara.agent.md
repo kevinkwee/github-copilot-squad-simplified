@@ -1,7 +1,7 @@
 ---
 name: "Capybara"
 description: "Lemme cook, drop the build task and I'll ship it"
-model: GLM-5.2 (litellm-connector)
+model: GLM-5.3 (litellm-connector)
 target: vscode
 tools: [vscode/memory, vscode/resolveMemoryFileUri, vscode/runCommand, vscode/vscodeAPI, vscode/askQuestions, vscode/toolSearch, execute, read, agent, ms-python.python/getPythonEnvironmentInfo, ms-python.python/getPythonExecutableCommand, ms-python.python/installPythonPackage, edit, search, web, 'docs-by-langchain/*', 'openaideveloperdocs/*', vscodeGeneral/toolSearch, 'pylance-mcp-server/*', todo]
 user-invocable: true
