@@ -145,11 +145,13 @@ When the linter reports a violation, follow this decision tree **in order**. Use
 ### Naming
 
 - Use clear, meaningful, intention-revealing names. The name should answer *why* it exists and *what* it does.
-- Functions use verbs: `get`, `create`, `update`, `delete`, `validate`, `format`, `parse`.
-- Booleans use prefixes: `is`, `has`, `can`, `should`.
+- Functions start with a verb that names the action they perform.
+- When a framework or convention dictates the name (interface implementations, overrides, event handlers, generated hooks), follow it.
+- Classes are nouns: the type is a thing, and its functions are its behavior.
+- Booleans read as a yes/no question to the reader. A prefix (`is_`, `has_`, `can_`, `should_`) works, and so does a plain adjective or past participle (`enabled`, `deprecated`) when the declaration or context makes the type clear. Prefer whichever form the surrounding code already uses, so related names stay consistent.
 - No abbreviations unless universally understood (`id`, `url`, `api`).
 - No generic names: `data`, `result`, `obj`, `thing`, `temp`, `misc`, `utils`.
-- No names with "and", "or", or "then", as that signals multiple responsibilities.
+- The joiners "and" or "or" in a unit's name signal that the unit may hold two responsibilities. Treat them as a reason to re-examine the unit, and usually to split it, not as words that must never appear. When the joined form is genuinely one domain concept, the name is fine.
 
 ### Strong Typing
 
