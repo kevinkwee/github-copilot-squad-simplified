@@ -37,8 +37,8 @@ When working inside a mapped folder, read and follow that folder's `AGENTS.md` i
 ### Ground Rules
 
 - Read and understand existing code before modifying it.
-- Default to the project's existing patterns and conventions. Existing patterns are a starting point, not evidence of correctness.
-- Existing code is not automatically right. Legacy code can carry bad practices, over-complex code, and code smells. If something looks wrong, speak up and write new code the right way (correct, secure, performant, readable, maintainable) instead of propagating the problem, even if that means departing from a bad existing pattern.
+- Treat the project's existing patterns and code as a starting point, not as evidence of correctness. Legacy code can carry bad practices, over-complex code, and code smells. If something looks wrong, speak up and write new code the right way (correct, secure, performant, readable, maintainable) instead of propagating the problem, even if that means departing from the existing code.
+- Isolate new code from legacy where possible, and never copy legacy code into new code without reviewing its quality.
 - If a requirement is ambiguous, ask before writing code.
 - Prefer incremental delivery: core logic first, then edge cases, then refinements.
 - Do not overengineer. Build for today's requirements, not hypothetical future ones.
@@ -54,7 +54,7 @@ When working inside a mapped folder, read and follow that folder's `AGENTS.md` i
 | **OCP** (Open/Closed) | Add new behavior by writing new code, not modifying existing code. Use polymorphism or strategy patterns where change is expected. | Over-engineering with premature abstractions. Apply OCP where you have *evidence* of changing requirements. |
 | **LSP** (Liskov Substitution) | Subclasses must honor the contract of their parent. Prefer composition over inheritance when "is-a" is not strict. | Overriding a method to throw `NotImplementedError` or do nothing. |
 | **ISP** (Interface Segregation) | Define small, role-specific interfaces. Clients depend only on methods they use. | Creating one "service" interface stuffed with methods for many unrelated roles. |
-| **DIP** (Dependency Inversion) | Depend on abstractions at module boundaries, not concrete implementations. Domain logic must never import from infrastructure. | Confusing DIP with "just use dependency injection." DIP is about inverting the *direction of source-code dependency*. |
+| **DIP** (Dependency Inversion) | Depend on abstractions at module boundaries, not concrete implementations. | Confusing DIP with "just use dependency injection." DIP is about inverting the *direction of source-code dependency*. |
 
 ### DRY (Don't Repeat Yourself)
 
@@ -353,7 +353,7 @@ A given exception should be logged by exactly **one** handler: the layer that **
 ### PII in Logs (Zero Tolerance)
 
 - **NEVER** log: email addresses, user names, phone numbers, physical addresses, tokens, passwords.
-- **Approved identifiers**: `auth_id`, `user_id`, `internal_id`.
+- **Approved identifiers**: only the project's approved identifier set (e.g. `user_id`). <!-- fill in the project's identifier names -->
 - No `print()` or `console.log()` with user data, since these go to production logs.
 
 ## Testing
@@ -394,7 +394,7 @@ Choose the pattern that matches the test:
 Rules that apply to all patterns:
 
 - Prefer the split form when there is a clear subject and a distinguishable aspect (an input variant, an error state, a missing field, an empty collection). Use the single-phrase form only when splitting would be artificial.
-- Keep names concise and readable: `snake_case`, spell words out (no abbreviations beyond the allowed list), prefer `_not_found` over `_doesnt_exist`. Do not pad names with `should`/`when` ceremony.
+- Keep names concise and readable, and prefer `_not_found` over `_doesnt_exist`. Do not pad names with `should`/`when` ceremony.
 - Do not encode the assertion type or the fixture names in the test name.
 - Group tests with a `class TestXxx` whose name matches the unit under test.
 
@@ -440,7 +440,7 @@ npx vitest run tests/your_tests.test.ts --coverage
 
 ### All Created Tests MUST Pass
 
-- Every test you create or modify MUST pass. Zero failures. Zero exceptions.
+- Every test you create or modify MUST pass. Zero failures, zero skips.
 - Never disable, skip, or delete a test to hide a failure.
 - Never leave a test "to fix later". Fix it now.
 - If coverage is below the agreed minimum: write more tests, re-run, repeat until the minimum is met.
@@ -468,7 +468,7 @@ npx vitest run tests/your_tests.test.ts --coverage
 <!-- Delete this section if not applicable. Document the framework's specifics (migration phases, version allocation) here, with a link to the authoritative doc. -->
 
 - Every migration script MUST be idempotent: safe to run more than once on the same database without corrupting data or raising errors. A repeated run must be a no-op or a guarded pass, never a crash or a data-duplicating write.
-- DELETE/UPDATE by a stable key (xmlid or unique business key), never by shifting row ids/ranges.
+- DELETE/UPDATE by a stable key (a unique business key, or the framework's stable record identifier), never by shifting row ids/ranges.
 - Guard DDL and back-fills with existence checks (`IF EXISTS` / `IF NOT EXISTS`, column/table existence checks) so a repeated run, or a database at a different schema point, does not crash.
 - Do not assume legacy columns/tables exist: existence-check reads and DDL against a possibly-different schema, or derive back-fill data from surviving columns.
 - Make best-effort statements isolated so one failing statement cannot abort the whole migration transaction. On engines that abort a transaction on any statement error, wrap each best-effort statement in a savepoint and catch the re-raised error. A savepoint undoes only the work done since it was set, which keeps the transaction alive and the rest of the migration runnable.
