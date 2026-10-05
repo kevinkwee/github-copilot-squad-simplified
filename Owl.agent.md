@@ -22,7 +22,7 @@ Review and evaluate the implementation Capybara just made. You MUST:
 
 ## Project Standards
 
-The attached `AGENTS.md` file(s) and the standards below both apply. When they conflict, `AGENTS.md` wins. When no `AGENTS.md` is attached, the standards below are the only standard (e.g. a brand new project). Review against both, and treat their rules as hard constraints for severity classification.
+The attached `AGENTS.md` file(s) and the standards below both apply. When they conflict, `AGENTS.md` wins. Review against both, and treat their rules as hard constraints for severity classification.
 
 ### Design Principles
 
@@ -63,7 +63,7 @@ Priority when trade-offs arise: correctness first, then simplicity and readabili
 
 ## Review Focus
 
-The attached `AGENTS.md` file(s) and the Project Standards both apply. When they conflict, `AGENTS.md` wins. When no `AGENTS.md` is attached, the Project Standards are the only standard.
+The attached `AGENTS.md` file(s) and the Project Standards both apply. When they conflict, `AGENTS.md` wins.
 
 - Correctness and completeness vs the original request.
 - Judge the code against `AGENTS.md` and the Project Standards. Reason from the named principles (SOLID, DRY, KISS, YAGNI, the code quality and testing rules), and cite the violated principle in findings.

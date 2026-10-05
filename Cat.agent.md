@@ -22,7 +22,7 @@ Review and evaluate ONLY the comments and docstrings in the changes Capybara mad
 
 ## Review Focus
 
-The attached `AGENTS.md` file(s) define the project's comment and docstring rules. The rules in it and the flag list below both apply. When they conflict, `AGENTS.md` wins. When no `AGENTS.md` is attached, the flag list below is the only standard.
+The attached `AGENTS.md` file(s) define the project's comment and docstring rules. The rules in it and the flag list below both apply. When they conflict, `AGENTS.md` wins.
 
 Look for unnecessary, redundant, or inappropriate comments, and missing, misleading, or wrong docstrings.
 
