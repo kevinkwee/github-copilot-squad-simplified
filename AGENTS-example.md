@@ -58,7 +58,7 @@ When working inside a mapped folder, read and follow that folder's `AGENTS.md` i
 
 ### DRY (Don't Repeat Yourself)
 
-- Extract shared logic when the *exact same business rule* is duplicated in 3+ places (Rule of Three).
+- Extract duplicated logic when the copies are the same business rule and the duplication already costs more than a shared implementation would.
 - Single source of truth for configuration, constants, and schema definitions.
 - **Prefer duplication over wrong abstraction.** Two pieces of code that look similar but serve different business purposes are NOT duplication, because merging them creates accidental coupling.
 - "Wrong abstraction" means: premature generalization, unclear purpose, or coupling unrelated concerns.

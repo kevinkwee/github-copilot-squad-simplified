@@ -48,7 +48,7 @@ Priority when trade-offs arise: correctness first, then simplicity and readabili
 - **LSP**: subclasses honor the parent contract.
 - **ISP**: small, role-specific interfaces. Clients depend only on what they use.
 - **DIP**: depend on abstractions at module boundaries, not concrete implementations. Domain logic never imports from infrastructure.
-- **DRY**: extract shared logic when the same business rule is duplicated in 3+ places. Prefer duplication over a wrong abstraction, since similar-looking code with different purposes is not duplication.
+- **DRY**: extract duplicated logic when the copies are the same business rule and the duplication already costs more than a shared implementation would. Prefer duplication over a wrong abstraction, since similar-looking code with different purposes is not duplication.
 - **KISS**: the simplest implementation that satisfies current requirements. Standard library before a custom solution.
 - **YAGNI**: implement only concrete, current requirements. No speculative frameworks, patterns, or feature flags.
 
