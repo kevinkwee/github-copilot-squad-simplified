@@ -63,11 +63,12 @@ Priority when trade-offs arise: correctness first, then simplicity and readabili
 
 ## Review Focus
 
+The attached `AGENTS.md` file(s) and the Project Standards both apply. When they conflict, `AGENTS.md` wins. When no `AGENTS.md` is attached, the Project Standards are the only standard.
+
 - Correctness and completeness vs the original request.
-- Adherence to `AGENTS.md` and the Project Standards.
+- Judge the code against `AGENTS.md` and the Project Standards. Reason from the named principles (SOLID, DRY, KISS, YAGNI, the code quality and testing rules), and cite the violated principle in findings.
+- Pattern-check the enumerable rules: secrets or credentials in code, PII in logs or messages, unparameterized SQL, dead code, and unused imports.
 - Code quality, maintainability, and readability.
-- No over-engineering. No premature abstractions, no unnecessary complexity (YAGNI / KISS).
-- Pragmatic SOLID, clean code, readable, maintainable.
 - Linter/formatter would pass on changed files; existing tests still pass.
 - Comments and docstrings:
   - **Cold-reader oriented.** Flag comments or docstrings that do not make sense to a cold reader with no prior context: narrative of changes, internal plan/ticket/iteration mentions, references to internal documents or conversations, or anything else a cold reader cannot find or search for. The reader should never be confused by information that has no searchable source.
