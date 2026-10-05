@@ -364,6 +364,7 @@ A given exception should be logged by exactly **one** handler: the layer that **
 
 - Write unit tests for all core logic.
 - Write integration tests for all API endpoints and external integrations.
+- Distribute tests as a pyramid: many fast unit tests at the base, focused integration tests at service and external boundaries, and only a few end-to-end tests for critical user journeys.
 - Follow Arrange-Act-Assert (AAA) structure. ONE act per test, ONE logical assertion per test.
 - Tests MUST be independent, deterministic, and not depend on execution order.
 - Mock or fake all external dependencies (DB, APIs, filesystem, time, randomness). Never hit real external services in tests.
