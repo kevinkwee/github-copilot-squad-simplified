@@ -1,4 +1,4 @@
-# AGENTS.md (Example)
+# AGENTS.md (Template)
 
 This file provides guidance to AI coding agents when working with code in this repository.
 
