@@ -72,7 +72,7 @@ Copy the agent profiles into:
 
 - `.github/agents/*.agent.md`
 
-This makes them available for that repository/workspace. In this repo the profiles live in [`agents/`](agents/), so copying (or linking) that folder's files into your project's `.github/agents/` is enough; the `skills/` folder ships `agents-md` the same way.
+This makes them available for that repository/workspace. In this repo the profiles live in [`agents/`](agents/), so copying (or linking) that folder's files into your project's `.github/agents/` is enough; the `skills/` folder ships `agents-md` and `commit-message` the same way.
 
 ### Option B: User-level agents
 
@@ -223,6 +223,20 @@ skills/
 - **`/agents-md adapt <path>`**: audits an existing `AGENTS.md` against the template, then proposes add/modify/keep changes. Deliberate project-specific choices are preserved and flagged, never silently overwritten. The skill's writing conventions (no em/en dashes, no hyphen-as-clause-separator) always converge.
 - **Deployment**: `skills/` sits at the repo root on purpose. Clone this whole repo into your project's `.github/` folder (or copy just the `skills/` folder into it) and the skill lands at `.github/skills/agents-md/`, where VS Code discovers it.
 - **Template edits**: edit `skills/agents-md/assets/AGENTS-template.md` directly; it is the single canonical template inside this repo, and the skill always reads it from there.
+
+## Commit message skill
+
+A second shipped skill writes commit messages:
+
+```text
+skills/
+└── commit-message/
+    └── SKILL.md              # Conventional Commits procedure
+```
+
+- **`/commit-message`**: reads the staged changes (`git diff --cached`), matches the repo's recent message style, and writes a Conventional Commits message (type, optional scope, imperative single-line description, optional body and footer, `!` before the colon for breaking changes). It never stages files itself, and never mentions unstaged changes.
+- **After presenting the message** it asks how to proceed: commit as-is, revise, or leave it as message only. The commit follows PowerShell-safe quoting rules (single-quote strategy, or the backtick escape when double quotes are needed), one `-m` per paragraph.
+- **Deployment**: same model as `agents-md`; the skill is discovered at `.github/skills/commit-message/` when this repo is cloned or the `skills/` folder copied into your project's `.github/`.
 
 ## Compared to the original squad
 
