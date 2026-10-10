@@ -40,7 +40,7 @@ Return the message in a single fenced block so it can be copied verbatim. Do not
 
 ## Ask how to proceed
 
-After presenting the message, use the ask tool (#tool:vscode/askQuestions with `allowFreeformInput: true`) with options to commit it as-is or leave it as message only, plus freeform input for anything else.
+After presenting the message, ask the user how to proceed, with options to commit it as-is or leave it as message only, plus a freeform reply for anything else.
 
 - **Commit as-is**: run the commit using the PowerShell rules below.
 - **Message only**: report the final message and stop.

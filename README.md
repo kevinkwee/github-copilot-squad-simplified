@@ -1,6 +1,6 @@
 # GitHub Copilot Squad (Simplified)
 
-A simplified orchestration setup for the **GitHub Copilot coding agent**, and a leaner variant of [github-copilot-squad](https://github.com/kevinkwee/github-copilot-squad). It ships in two modes:
+A simplified orchestration setup for the **VS Code Agents window** (built on the Copilot SDK harness), and a leaner variant of [github-copilot-squad](https://github.com/kevinkwee/github-copilot-squad). It ships in two modes:
 
 - **Trio (default)**: `Capybara` (entry point + implementer) + `Owl` (code reviewer) + `Cat` (comment/docstring reviewer).
 - **Duo**: `Capybara` + `Owl` only, with no dedicated comment/docstring pass. The Duo behavior lives in `CapybaraDuo.agent.md`.
@@ -12,7 +12,7 @@ In both modes the goal is the same: keep implementation and review as **separate
 The original squad offloads implementation to a dedicated builder agent (`Otter`), with `Capybara` acting as a pure router. After using it on real-world tasks, that separation turned out to be **unnecessary** for this setup, for a few reasons:
 
 - **A separate generalist implementer adds little value.** Spinning up a separate agent just to offload execution only pays off when that agent is **specialized**: a frontend specialist, a backend specialist, or a specific-framework specialist that brings domain knowledge the orchestrator lacks. Our implementer (`Otter`) was a **generalist**, just like `Capybara`. Two generalists don't give you more perspective; they give you more handoff overhead.
-- **A fresh isolated context per request is expensive.** Because `Otter` is a separate sub-agent, every user request starts in a **fresh, isolated context**. That means more tokens and more time for the agent to re-read the codebase, re-analyze the problem, and rebuild understanding, even for a follow-up that builds directly on what was just done.
+- **A fresh isolated context per request is expensive.** Because `Otter` is a separate subagent, every user request starts in a **fresh, isolated context**. That means more tokens and more time for the agent to re-read the codebase, re-analyze the problem, and rebuild understanding, even for a follow-up that builds directly on what was just done.
 - **Merging keeps the working context warm.** When `Capybara` does the implementation itself, it **retains context about what was just built**. A subsequent request doesn't need the agent to reanalyze the same files and decisions over and over; the relevant context is already there.
 
 ### The trade-off
@@ -59,12 +59,21 @@ flowchart LR
 
 **Agent files in this repo:** in [`agents/`](agents/): `Capybara.agent.md` (Trio, default), `CapybaraDuo.agent.md` (Duo variant), `Owl.agent.md`, `Cat.agent.md`.
 
+## Harness-agnostic design
+
+The squad avoids naming tools so it does not break when the underlying Copilot SDK renames or reshapes them:
+
+- Agent frontmatter pins no `tools:` list, so every agent inherits the harness default tool set.
+- Instructions reference capabilities only: ask the user, create a todo list, run tests in a terminal, delegate to a reviewer as a subagent and wait for its verdict.
+- Constraints such as "you MUST NOT call yourself as a subagent" live in the instructions, so they hold on every harness.
+
+If a harness lacks a capability the squad depends on, such as asking the user, running commands, or delegating subagents, the agents surface that instead of silently degrading.
+
 ## Quick start
 
 ### Prerequisites
 
-- GitHub Copilot Chat extension with custom agents support
-- VS Code
+- VS Code with Copilot custom agents support (Agents window or Chat view)
 
 ### Option A: Repo-level agents (recommended)
 
@@ -76,14 +85,14 @@ This makes them available for that repository/workspace. In this repo the profil
 
 ### Option B: User-level agents
 
-Create/store agent profiles in your user data custom agents location from the **Configure Custom Agents...** button in VS Code.
+Create user-level custom agents with the **Agent Customizations editor** (or the **Chat: New Custom Agent** command), or place the `.agent.md` files in `~/.copilot/agents/`, the folder agent host sessions read user-level agents from.
 
 This makes them available across your workspaces.
 
 ### Use it
 
-1. Open Copilot Chat in VS Code.
-2. Select `Capybara` (Trio, default) or `Capybara Duo` from the agents dropdown.
+1. Open the Agents window (or the Chat view) in VS Code.
+2. Select `Capybara` (Trio, default) or `Capybara Duo` from the agent picker.
 3. Ask your request naturally.
 4. For technical requests, `Capybara` implements, then runs the Owl review loop (and, in Trio, the Cat comment/docstring loop).
 
@@ -279,7 +288,7 @@ skills/
 
 ## How to use
 
-- Start chat with `Capybara` (Trio, default) or `Capybara Duo` (Duo, no Cat pass).
+- Start a session with `Capybara` (Trio, default) or `Capybara Duo` (Duo, no Cat pass).
 - Ask naturally:
   - Technical request example: "Add endpoint X with validation and tests."
   - Non-technical request example: "Explain this repository architecture."
@@ -305,7 +314,7 @@ This creates a lightweight audit trail of what was implemented and what was revi
 Common tweaks you can make:
 
 - Change models in frontmatter (`model:`)
-- Restrict/expand tool access (`tools:`)
+- Pin a tool list in frontmatter (`tools:`) if you want to restrict access. The shipped agents omit `tools:` and inherit the harness defaults, so SDK tool renames cannot break them
 - Switch between Trio (`Capybara`) and Duo (`Capybara Duo`)
 - Adjust code review strictness in `Owl`
 - Adjust comment/docstring review strictness in `Cat`
@@ -314,9 +323,10 @@ Common tweaks you can make:
 
 ## Official references
 
-- <https://docs.github.com/en/copilot/concepts/agents/coding-agent/about-custom-agents>
-- <https://docs.github.com/en/copilot/how-tos/use-copilot-agents/coding-agent/create-custom-agents>
-- <https://docs.github.com/en/copilot/reference/custom-agents-configuration>
+- <https://code.visualstudio.com/docs/agent-customization/custom-agents>
+- <https://code.visualstudio.com/docs/agent-customization/agent-skills>
+- <https://code.visualstudio.com/docs/agents/run/subagents>
+- <https://code.visualstudio.com/docs/agents/run/tools>
 
 ## License
 

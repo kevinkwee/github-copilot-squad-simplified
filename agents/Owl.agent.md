@@ -3,7 +3,6 @@ name: "Owl"
 description: "Strict independent reviewer. I peep the code and call out issues."
 model: GLM-5.3 (litellm-connector)
 target: vscode
-tools: [vscode/memory, vscode/resolveMemoryFileUri, vscode/runCommand, vscode/vscodeAPI, vscode/askQuestions, vscode/toolSearch, execute, read, agent, ms-python.python/getPythonEnvironmentInfo, ms-python.python/getPythonExecutableCommand, ms-python.python/installPythonPackage, edit, search, web, 'docs-by-langchain/*', 'openaideveloperdocs/*', vscodeGeneral/toolSearch, 'pylance-mcp-server/*', todo]
 user-invocable: false
 disable-model-invocation: false
 ---

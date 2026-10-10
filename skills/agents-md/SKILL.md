@@ -23,7 +23,7 @@ The template is bundled in this skill: [assets/AGENTS-template.md](./assets/AGEN
   1. **Outdated pattern** (the template deliberately retired it): converge to the template wording.
   2. **Missing template section**: add it, with real project content where the repo supplies it and a fill-in placeholder otherwise.
   3. **Deliberate project-specific choice**: keep it as is, and report it as an intentional difference. Never "fix" one.
-- Ask only for facts the repo cannot answer, and use the ask tool with `allowFreeformInput` on any question that offers options. Never request secrets.
+- Ask only for facts the repo cannot answer. Never request secrets.
 
 ## Mode selection
 
@@ -57,6 +57,6 @@ The template is bundled in this skill: [assets/AGENTS-template.md](./assets/AGEN
    - lines carrying outdated patterns, each paired with the modern template equivalent. Typical examples: mechanical numeric thresholds the template dropped, `should_[expected]_when_[condition]` test naming, em/en dashes and hyphen clause separators, unconditional word bans such as "and/or/then", and coverage targets stated as both a target and a minimum.
    - deliberate project-specific decisions, listed under "kept, flagged" (the project rule wins)
 3. **Present the change plan** as add/modify/keep lists with a one-line rationale each. Apply nothing yet. Mechanical fixes (dash rule violations, dead anchors) can be pre-approved in bulk; say so explicitly in the plan.
-4. **Get confirmation** through the ask tool (with freeform input) for the wording changes. The keep/flag list needs no approval because it changes nothing.
+4. **Get confirmation** from the user for the wording changes. The keep/flag list needs no approval because it changes nothing.
 5. **Apply the approved changes only**, then **validate** as in create mode (placeholders, dashes, commands, anchors), and re-check that section references still resolve after the edits.
 6. **Report**: the added list, the modified list, and the kept-and-flagged list, so the user can trace every change back to a decision.

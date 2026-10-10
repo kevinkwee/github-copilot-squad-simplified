@@ -73,8 +73,8 @@ Write the title on its own line, outside the description code block, then the fu
 
 ## Ask how to proceed
 
-After presenting title and description, use the ask tool (#tool:vscode/askQuestions with `allowFreeformInput: true`) with options to create the PR as-is, or leave it as text only, plus freeform input for anything else.
+After presenting title and description, ask the user how to proceed, with options to create the PR as-is or leave it as text only, plus a freeform reply for anything else.
 
-- **Create the PR as-is**: use the GitHub PR tool `github-pull-request_create_pull_request` when available, otherwise `gh pr create`, with the title and description exactly as presented. Confirm the pushed branch with the user before creating; never create on the wrong base branch silently.
+- **Create the PR as-is**: use an available PR-creation tool when one exists, otherwise `gh pr create`, with the title and description exactly as presented. Confirm the pushed branch with the user before creating; never create on the wrong base branch silently.
 - **Text only**: report the title and description and stop.
 - **Freeform text**: treat it as the requested revision. Apply the changes, present the updated title and description, and ask again.
