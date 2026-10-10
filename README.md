@@ -1,5 +1,8 @@
 # GitHub Copilot Squad (Simplified)
 
+> [!WARNING]
+> The `vscode-local-harness` branch holds the VS Code local harness version of the squad (custom `.agent.md` profiles running in VS Code chat). It is feature-frozen and **no longer maintained**. Active development continues on the `main` branch, which targets the **VS Code Agents Window** built on the Copilot SDK (Copilot harness). If you are here to install the squad, check `main` first.
+
 A simplified orchestration setup for the **GitHub Copilot coding agent**, and a leaner variant of [github-copilot-squad](https://github.com/kevinkwee/github-copilot-squad). It ships in two modes:
 
 - **Trio (default)**: `Capybara` (entry point + implementer) + `Owl` (code reviewer) + `Cat` (comment/docstring reviewer).
@@ -60,6 +63,9 @@ flowchart LR
 **Agent files in this repo:** in [`agents/`](agents/): `Capybara.agent.md` (Trio, default), `CapybaraDuo.agent.md` (Duo variant), `Owl.agent.md`, `Cat.agent.md`.
 
 ## Quick start
+
+> [!WARNING]
+> This Quick start is for the frozen VS Code local harness version on this branch. For the maintained agents window version, see the `main` branch. Both install paths work in VS Code today.
 
 ### Prerequisites
 
