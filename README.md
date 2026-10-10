@@ -72,7 +72,7 @@ Copy the agent profiles into:
 
 - `.github/agents/*.agent.md`
 
-This makes them available for that repository/workspace. In this repo the profiles live in [`agents/`](agents/), so copying (or linking) that folder's files into your project's `.github/agents/` is enough; the `skills/` folder ships `agents-md` and `commit-message` the same way.
+This makes them available for that repository/workspace. In this repo the profiles live in [`agents/`](agents/), so copying (or linking) that folder's files into your project's `.github/agents/` is enough; the `skills/` folder ships `agents-md`, `commit-message`, and `pr-description` the same way.
 
 ### Option B: User-level agents
 
@@ -237,6 +237,21 @@ skills/
 - **`/commit-message`**: reads the staged changes (`git diff --cached`), matches the repo's recent message style, and writes a Conventional Commits message (type, optional scope, imperative single-line description, optional body and footer, `!` before the colon for breaking changes). It never stages files itself, and never mentions unstaged changes.
 - **After presenting the message** it asks how to proceed: commit as-is, revise, or leave it as message only. The commit follows PowerShell-safe quoting rules (single-quote strategy, or the backtick escape when double quotes are needed), one `-m` per paragraph.
 - **Deployment**: same model as `agents-md`; the skill is discovered at `.github/skills/commit-message/` when this repo is cloned or the `skills/` folder copied into your project's `.github/`.
+
+## PR description skill
+
+A third shipped skill writes PR titles and descriptions:
+
+```text
+skills/
+└── pr-description/
+    └── SKILL.md              # PR title + description procedure
+```
+
+- **`/pr-description`**: derives the base branch and merge base, reads every commit message on the branch plus the diff, then writes a Conventional Commits style title (single line, imperative, `!` before the colon when breaking) and a full description. Uses repo-level PR templates when found (`.github/PULL_REQUEST_TEMPLATE.md`), falls back to a built-in default format (Summary, Type of Change, Key Changes, Notes, How This Has Been Tested).
+- **Template handling**: a user-supplied template wins, and the result is returned in a code block rather than written into any template file (unless you explicitly ask for that).
+- **After presenting** the title and description it asks how to proceed: create the PR as-is (confirming the target branch first), or text only. Freeform input revises it.
+- **Deployment**: same model as the other skills; discovered at `.github/skills/pr-description/`.
 
 ## Compared to the original squad
 
