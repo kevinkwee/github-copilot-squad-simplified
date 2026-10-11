@@ -1,7 +1,7 @@
 ---
 name: "Capybara"
 description: "Lemme cook, drop the build task and I'll ship it"
-model: GLM-5.3 (litellm-connector)
+model: GLM-5.3 (agent-host-copilotcli)
 target: vscode
 user-invocable: true
 disable-model-invocation: true
