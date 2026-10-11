@@ -333,12 +333,14 @@ For repo-level use without the plugin, copy `scripts/guard-pwsh-continuation/` i
                 "matcher": "Bash",
                 "powershell": "pwsh -NoProfile -ExecutionPolicy Bypass -File .github/scripts/guard-pwsh-continuation/guard-pwsh-continuation.ps1",
                 "bash": "exit 0",
-                "timeout": 5
+                "timeout": 10
             }
         ]
     }
 }
 ```
+
+Whichever way the guard is deployed, verify it functionally: the Hooks panel in the Agent Customizations editor does not list Copilot SDK plugin hooks, so in a Copilot session ask an agent to run an incomplete PowerShell command (for example a `Write-Host` with an unclosed quote). The guard denies the call with a rewrite hint instead of letting it hang.
 
 ### guard-pwsh-continuation
 
