@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "copilot-squad-simplified",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "An implement-and-review agent squad for the VS Code Agents window (Copilot SDK harness): Capybara implements, Owl reviews the code, Cat grooms comments and docstrings. Ships AGENTS.md, commit-message, and PR-description skills plus a PowerShell continuation guard hook.",
   "author": {
     "name": "Michael Elian Kevin",
