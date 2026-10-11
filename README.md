@@ -251,6 +251,8 @@ sequenceDiagram
 
 A separate `AGENTS.md` is **easier to update and maintain**, especially when it contains a section that is **managed by the agent itself** (the agent can read and edit `AGENTS.md` in place without you having to edit the bundled agent profile).
 
+**Blank projects**: when a project has no `AGENTS.md` at all, `Capybara` bootstraps one on the first implementation request. Until the file exists, the `agents-md` skill's bundled template rules are the baseline. Once the requirements and plan for the task are gathered, `Capybara` offers the bootstrap and, unless the user declines, runs the `agents-md` skill in create mode (see [AGENTS.md skill](#agentsmd-skill)) and derives the file's content from those requirements instead of a separate interview. The new `AGENTS.md` then applies like a provided one, so the file is created at most once per project. A declined bootstrap is offered again on the next implementation request. Comment/docstring-only, commit, and PR requests never trigger it.
+
 > The template ships inside the `agents-md` skill below: fill the placeholder comments, delete the sections your project does not need, and adapt the language-specific examples to your stack. The skill automates this for you, both when creating a new file and when aligning an existing one.
 
 ## AGENTS.md skill
@@ -267,6 +269,7 @@ skills/
 
 - **`/agents-md create`**: inspects the repo (stack, versions, commands, layout, test and coverage tooling), asks only for facts the code cannot answer, then fills the template's placeholders and drops the sections your project does not need. Produces a ready, project-specific `AGENTS.md` (default: repo root).
 - **`/agents-md adapt <path>`**: audits an existing `AGENTS.md` against the template, then proposes add/modify/keep changes. Deliberate project-specific choices are preserved and flagged, never silently overwritten. The skill's writing conventions (no em/en dashes, no hyphen-as-clause-separator) always converge.
+- **Automatic bootstrap**: `Capybara` invokes this skill itself when implementing in a project that has no `AGENTS.md` yet, deriving the content from the task's requirements (see [Project code-writing rules](#project-code-writing-rules-agentsmd)).
 - **Deployment**: `skills/` sits at the repo root on purpose. Clone this whole repo into your project's `.github/` folder (or copy just the `skills/` folder into it) and the skill lands at `.github/skills/agents-md/`, where VS Code discovers it.
 - **Template edits**: edit `skills/agents-md/assets/AGENTS-template.md` directly; it is the single canonical template inside this repo, and the skill always reads it from there.
 
