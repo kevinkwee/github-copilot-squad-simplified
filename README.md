@@ -244,7 +244,8 @@ skills/
 ```
 
 - **`/commit-message`**: reads the staged changes (`git diff --cached`), matches the repo's recent message style, and writes a Conventional Commits message (type, optional scope, imperative single-line description, optional body and footer, `!` before the colon for breaking changes). It never stages files itself, and never mentions unstaged changes.
-- **After presenting the message** it asks how to proceed: commit as-is, revise, or leave it as message only. The commit follows PowerShell-safe quoting rules (single-quote strategy, or the backtick escape when double quotes are needed), one `-m` per paragraph.
+- **Style authority**: load it before any commit, including one a built-in commit workflow skill performs. It owns the message rules, including the no `Co-authored-by` trailer policy unless the user asks for one.
+- **After presenting the message** it asks how to proceed: commit as-is, revise, or leave it as message only. Commit as-is runs through the session's built-in commit skill when one exists; otherwise it commits directly with PowerShell-safe quoting rules (single-quote strategy, or the backtick escape when double quotes are needed), one `-m` per paragraph.
 - **Deployment**: same model as `agents-md`; the skill is discovered at `.github/skills/commit-message/` when this repo is cloned or the `skills/` folder copied into your project's `.github/`.
 
 ## PR description skill
@@ -259,8 +260,30 @@ skills/
 
 - **`/pr-description`**: derives the base branch and merge base, reads every commit message on the branch plus the diff, then writes a Conventional Commits style title (single line, imperative, `!` before the colon when breaking) and a full description. Uses repo-level PR templates when found (`.github/PULL_REQUEST_TEMPLATE.md`), falls back to a built-in default format (Summary, Type of Change, Key Changes, Notes, How This Has Been Tested).
 - **Template handling**: a user-supplied template wins, and the result is returned in a code block rather than written into any template file (unless you explicitly ask for that).
-- **After presenting** the title and description it asks how to proceed: create the PR as-is (confirming the target branch first), or text only. Freeform input revises it.
+- **Style authority**: load it before any PR creation or update, including by a built-in PR workflow skill. It owns the title and description style.
+- **After presenting** the title and description it asks how to proceed: create the PR as-is (through the session's built-in PR creation skills when present, otherwise `gh pr create`, confirming the target branch first), create it as a draft when the user has not specified, or text only. Freeform input revises it.
 - **Deployment**: same model as the other skills; discovered at `.github/skills/pr-description/`.
+
+## Working with the built-in workflow skills
+
+The VS Code Agents window (built on the Copilot SDK harness) ships its own workflow skills for commits and pull requests: `commit`, `create-pr`, `create-draft-pr`, and `update-pr`. The squad's `commit-message` and `pr-description` skills are built to compose with them instead of competing:
+
+- **Division of labor**: the built-in skills own the action, meaning the commit itself, the branch push, PR creation, draft mode, and session bookkeeping (the linked PR that later update, merge, and fix-ci workflows use). The squad skills own the content and style, meaning the exact commit message, PR title, and description.
+- **Routing**: the squad skills' descriptions tell the agent to load them before any commit or PR creation, including one a built-in skill performs, because they own the style rules. On a plain "commit my changes" request, the built-in skill acts while the squad skill shapes the message. On "write me a commit message" (or `/commit-message`), the squad skill drafts and presents.
+- **One trailer rule everywhere**: the `commit-message` skill forbids `Co-authored-by` trailers unless the user asks for one. Because the skill is loaded for style before any commit, the rule holds on the built-in path too.
+- **Harness-agnostic fallback**: on harnesses without built-in skills (Copilot CLI, Codex via Agent Host, a plain terminal), the squad skills perform the action themselves with git and `gh`, unchanged.
+
+| Request | Who acts | Content style from |
+| --- | --- | --- |
+| "commit my changes", "save my work" | built-in commit skill | `commit-message` |
+| "write me a commit message" | `commit-message` (text only) | `commit-message` |
+| `/commit-message`, then "commit as-is" | built-in commit skill when present, else the skill's git step | `commit-message` |
+| "open a PR", "open a draft PR" | built-in `create-pr` / `create-draft-pr` | `pr-description` |
+| "write the PR description" | `pr-description` (text only) | `pr-description` |
+| `/pr-description`, then "create the PR as-is" | built-in PR skill when present, else `gh pr create` | `pr-description` |
+| Harness without built-in skills | the squad skills' own git / `gh` steps | the squad skills |
+
+Skill discovery is best effort. VS Code does not guarantee a skill invocation for every relevant prompt, so treat the description routing as strong steering rather than a hard override.
 
 ## Compared to the original squad
 
