@@ -1,7 +1,7 @@
 ---
 name: "Cat"
 description: "Fastidious groomer. I comb through comments and docstrings until every word earns its place."
-model: GLM-5.3-Flash (agent-host-copilotcli)
+model: GLM-5.3-Flash (litellm-connector)
 target: vscode
 user-invocable: false
 disable-model-invocation: false

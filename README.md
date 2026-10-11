@@ -7,8 +7,6 @@ A simplified orchestration setup for the **VS Code Agents window** (built on the
 
 In both modes the goal is the same: keep implementation and review as **separate perspectives**, so technical work goes through a build → review loop before final output. What's removed (vs the original 4-agent squad) is the overhead of a separate execution agent and a separate lightweight helper.
 
-The repo is also an installable [Agent Plugins](https://agent-plugins.org/) package: agents, skills, and the hook install together in one step, with no cloning or copying (see [Quick start](#quick-start)).
-
 ## Why this simplified version exists
 
 The original squad offloads implementation to a dedicated builder agent (`Otter`), with `Capybara` acting as a pure router. After using it on real-world tasks, that separation turned out to be **unnecessary** for this setup, for a few reasons:
@@ -59,9 +57,9 @@ flowchart LR
 - **Cat** (Trio only) is not user-invocable. After Owl approves, it reviews **only** the comments and docstrings, classifies findings as Critical or Minor, and returns `APPROVED` or `CHANGES REQUIRED`.
 - Capybara applies all **Critical** findings from Owl (and Cat, in Trio), re-reviews if needed, and returns the final result to the user.
 
-**Agent files in this repo:** in [`com.github.copilot/agents/`](com.github.copilot/agents/): `Capybara.agent.md` (Trio, default), `CapybaraDuo.agent.md` (Duo variant), `Owl.agent.md`, `Cat.agent.md`.
+**Agent files in this repo:** in [`agents/`](agents/): `Capybara.agent.md` (Trio, default), `CapybaraDuo.agent.md` (Duo variant), `Owl.agent.md`, `Cat.agent.md`.
 
-**Hook files in this repo:** in [`com.github.copilot/hooks/hooks.json`](com.github.copilot/hooks/hooks.json) and [`scripts/guard-pwsh-continuation/`](scripts/guard-pwsh-continuation/): the `guard-pwsh-continuation` PreToolUse config plus its companion script and test battery (see the Hooks section).
+**Hook files in this repo:** in [`hooks/`](hooks/) and [`scripts/guard-pwsh-continuation/`](scripts/guard-pwsh-continuation/): the `guard-pwsh-continuation` PreToolUse config plus its companion script and test battery (see the Hooks section).
 
 ## Harness-agnostic design
 
@@ -79,36 +77,23 @@ If a harness lacks a capability the squad depends on, such as asking the user, r
 
 - VS Code with Copilot custom agents support (Agents window or Chat view)
 
-### Option A: Install the plugin (recommended)
-
-The repo is an [Agent Plugins 1.0](https://agent-plugins.org/) package, so the full squad (agents + skills + hook) installs in one step, with no clone and no copying:
-
-- VS Code: run **Chat: Install Plugin From Source** from the Command Palette and enter the repo URL (`https://github.com/kevinkwee/github-copilot-squad-simplified`). VS Code clones and installs it itself.
-- Copilot session (Agents window or Chat view on the Agent Host): `/plugin install https://github.com/kevinkwee/github-copilot-squad-simplified`
-
-After installing, `Capybara` and `Capybara Duo` appear in the agent picker, the three skills appear under **Configure Skills**, and the guard hook is active. Manage the install (enable, disable, uninstall) from the **Agent Plugins - Installed** section of the Extensions view. If nothing appears, check that the `chat.plugins.enabled` setting is on.
-
-### Option B: Repo-level agents
+### Option A: Repo-level agents (recommended)
 
 Copy the agent profiles into:
 
 - `.github/agents/*.agent.md`
 
-This makes them available for that repository/workspace. In this repo the profiles live in [`com.github.copilot/agents/`](com.github.copilot/agents/), so copying (or linking) that folder's files into your project's `.github/agents/` is enough; the `skills/` folder ships `agents-md`, `commit-message`, and `pr-description` the same way; and the hook ships as `com.github.copilot/hooks/hooks.json` plus its companion script (see the Hooks section for the repo-level hook setup).
+This makes them available for that repository/workspace. In this repo the profiles live in [`agents/`](agents/), so copying (or linking) that folder's files into your project's `.github/agents/` is enough; the `skills/` folder ships `agents-md`, `commit-message`, and `pr-description` the same way; and the `hooks/` and `scripts/` folders ship the `guard-pwsh-continuation` hook the same way (see the Hooks section).
 
-### Option C: User-level agents
+### Option B: User-level agents
 
 Create user-level custom agents with the **Agent Customizations editor** (or the **Chat: New Custom Agent** command), or place the `.agent.md` files in `~/.copilot/agents/`, the folder agent host sessions read user-level agents from.
 
 This makes them available across your workspaces.
 
-### Pick one install path
-
-Install the plugin **or** copy the files, not both. All enabled copies load, so a plugin install plus a repo-level copy of the same profiles lists duplicate `Capybara`/`Owl`/`Cat` agents. Plugin-provided agents are managed by enabling or disabling the plugin; copied files are managed as files.
-
 ### Pinned model note
 
-The shipped agents pin `model: GLM-5.3 (litellm-connector)`. That pin is a personal setup choice, not a requirement. If that model is not available in your VS Code, pick your model from the chat model picker, or edit `model:` in each agent file to your model (or remove the line to always inherit the session default). For a plugin install, prefer the model picker: edits inside an installed plugin are overwritten when the plugin updates.
+The shipped agents pin `model: GLM-5.3 (litellm-connector)` (`Cat` uses `GLM-5.3-Flash (litellm-connector)`). That pin is a personal setup choice, not a requirement. If that model is not available in your VS Code, pick your model from the chat model picker, or edit `model:` in each agent file to your model (or remove the line to always inherit the session default).
 
 ### Use it
 
@@ -116,22 +101,6 @@ The shipped agents pin `model: GLM-5.3 (litellm-connector)`. That pin is a perso
 2. Select `Capybara` (Trio, default) or `Capybara Duo` from the agent picker.
 3. Ask your request naturally.
 4. For technical requests, `Capybara` implements, then runs the Owl review loop (and, in Trio, the Cat comment/docstring loop).
-
-## Plugin package layout
-
-The repo layout is the plugin layout (Agent Plugins 1.0):
-
-```text
-plugin.json                  # Agent Plugins 1.0 manifest (name, version, metadata)
-skills/                      # portable: agents-md, commit-message, pr-description
-com.github.copilot/          # Copilot-specific components
-├── agents/                  # Capybara.agent.md, CapybaraDuo.agent.md, Owl.agent.md, Cat.agent.md
-└── hooks/
-    └── hooks.json           # guard-pwsh-continuation PreToolUse config
-scripts/                     # companion hook scripts (one subfolder per hook)
-```
-
-`skills/` is the standard's portable location, so compatible clients can load those skills from the same package. `com.github.copilot/` is the namespace VS Code and other Copilot clients read for Copilot-specific capabilities such as custom agents and hooks; other clients ignore it.
 
 ## How the flow works
 
@@ -306,15 +275,14 @@ skills/
 
 ## Hooks
 
-The repo ships the hook as a plugin component, with config and script separated:
+The repo ships hooks the same way as agents and skills, with configs and scripts separated so the `hooks/` folder stays a flat list of JSON files as the collection grows:
 
-- **`com.github.copilot/hooks/hooks.json`** holds the hook config. A plugin install loads it automatically, and `${PLUGIN_ROOT}` in the command expands to the installed plugin's absolute path.
+- **`hooks/`** holds the JSON hook configs. The Copilot SDK harness discovers every `*.json` in a project's `.github/hooks/`.
 - **`scripts/`** holds the companion scripts, one subfolder per hook.
 
 ```text
-com.github.copilot/
-└── hooks/
-    └── hooks.json                          # PreToolUse hook config (${PLUGIN_ROOT} paths)
+hooks/
+└── guard-pwsh-continuation.json            # PreToolUse hook config
 
 scripts/
 └── guard-pwsh-continuation/
@@ -322,28 +290,9 @@ scripts/
     └── test-guard-pwsh-continuation.ps1   # out-of-process test battery
 ```
 
-A plugin install needs nothing else: Copilot SDK sessions (VS Code Agents window or Chat view Copilot sessions on the Agent Host, and Copilot CLI, which share the same SDK hook implementation) pick the hook up on their own.
+Copy `hooks/` into `.github/hooks/` and `scripts/` into `.github/scripts/` of your project, and Copilot SDK sessions (VS Code Agents window or Chat view Copilot sessions on the Agent Host, and Copilot CLI, which share the same SDK hook implementation) pick the hook up on their own.
 
-For repo-level use without the plugin, copy `scripts/guard-pwsh-continuation/` into `.github/scripts/` and create `.github/hooks/guard-pwsh-continuation.json` (the Copilot SDK harness discovers every `*.json` in a project's `.github/hooks/`) with the same content except the script path, which must be repo-relative because `${PLUGIN_ROOT}` only expands inside an installed plugin:
-
-```json
-{
-    "version": 1,
-    "hooks": {
-        "PreToolUse": [
-            {
-                "type": "command",
-                "matcher": "Bash",
-                "powershell": "pwsh -NoProfile -ExecutionPolicy Bypass -File .github/scripts/guard-pwsh-continuation/guard-pwsh-continuation.ps1",
-                "bash": "exit 0",
-                "timeout": 10
-            }
-        ]
-    }
-}
-```
-
-Whichever way the guard is deployed, verify it functionally: the Hooks panel in the Agent Customizations editor does not list Copilot SDK plugin hooks, so in a Copilot session ask an agent to run an incomplete PowerShell command (for example a `Write-Host` with an unclosed quote). The guard denies the call with a rewrite hint instead of letting it hang.
+To verify the guard functionally, ask an agent in a Copilot session to run an incomplete PowerShell command (for example a `Write-Host` with an unclosed quote). The guard denies the call with a rewrite hint instead of letting it hang.
 
 ### guard-pwsh-continuation
 
@@ -357,7 +306,7 @@ The hook is adapted to the **Copilot SDK harness only**:
 
 Operational notes:
 
-- **Prerequisite**: Windows sessions need PowerShell 7 (`pwsh`) on `PATH`. Copilot SDK `preToolUse` command hooks fail closed (a failed launch or non-zero exit denies the tool call), so without `pwsh` every shell command would be denied. Remove `com.github.copilot/hooks/hooks.json` (or disable or uninstall the plugin) to uninstall the guard; `scripts/` is inert without its config.
+- **Prerequisite**: Windows sessions need PowerShell 7 (`pwsh`) on `PATH`. Copilot SDK `preToolUse` command hooks fail closed (a failed launch or non-zero exit denies the tool call), so without `pwsh` every shell command would be denied. Remove `hooks/guard-pwsh-continuation.json` to uninstall the guard; `scripts/` is inert without its config.
 - **Timeouts fail open**: a slow or hung guard only surfaces a warning and lets the command proceed.
 - **Sandboxed Copilot CLI sessions** run repo hooks inside the sandbox with the session's file access, so the script under `.github/scripts/` stays reachable; `cwd` and `env` fields do not widen that access.
 - **Keep one copy**: all hook sources are combined and every entry runs. If you also keep a user-level copy in `%USERPROFILE%\.copilot\hooks\` (or `~/.copilot/hooks/`), drop one of the two so each command is not parsed twice.
@@ -453,8 +402,6 @@ Common tweaks you can make:
 ## Official references
 
 - <https://code.visualstudio.com/docs/agent-customization/custom-agents>
-- <https://code.visualstudio.com/docs/agent-customization/agent-plugins>
-- <https://agent-plugins.org/>
 - <https://code.visualstudio.com/docs/agent-customization/agent-skills>
 - <https://code.visualstudio.com/docs/agent-customization/hooks>
 - <https://code.visualstudio.com/docs/agents/run/subagents>

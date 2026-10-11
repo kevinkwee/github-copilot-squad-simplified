@@ -1,7 +1,7 @@
 ---
 name: "Owl"
 description: "Strict independent reviewer. I peep the code and call out issues."
-model: GLM-5.3 (agent-host-copilotcli)
+model: GLM-5.3 (litellm-connector)
 target: vscode
 user-invocable: false
 disable-model-invocation: false
