@@ -1,0 +1,14 @@
+{
+    "version": 1,
+    "hooks": {
+        "PreToolUse": [
+            {
+                "type": "command",
+                "matcher": "Bash",
+                "powershell": "pwsh -NoProfile -ExecutionPolicy Bypass -File .github/scripts/guard-pwsh-continuation/guard-pwsh-continuation.ps1",
+                "bash": "exit 0",
+                "timeout": 5
+            }
+        ]
+    }
+}

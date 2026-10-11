@@ -59,6 +59,8 @@ flowchart LR
 
 **Agent files in this repo:** in [`agents/`](agents/): `Capybara.agent.md` (Trio, default), `CapybaraDuo.agent.md` (Duo variant), `Owl.agent.md`, `Cat.agent.md`.
 
+**Hook files in this repo:** in [`hooks/`](hooks/) and [`scripts/guard-pwsh-continuation/`](scripts/guard-pwsh-continuation/): the `guard-pwsh-continuation` PreToolUse config plus its companion script and test battery (see the Hooks section).
+
 ## Harness-agnostic design
 
 The squad avoids naming tools so it does not break when the underlying Copilot SDK renames or reshapes them:
@@ -81,7 +83,7 @@ Copy the agent profiles into:
 
 - `.github/agents/*.agent.md`
 
-This makes them available for that repository/workspace. In this repo the profiles live in [`agents/`](agents/), so copying (or linking) that folder's files into your project's `.github/agents/` is enough; the `skills/` folder ships `agents-md`, `commit-message`, and `pr-description` the same way.
+This makes them available for that repository/workspace. In this repo the profiles live in [`agents/`](agents/), so copying (or linking) that folder's files into your project's `.github/agents/` is enough; the `skills/` folder ships `agents-md`, `commit-message`, and `pr-description` the same way; and the `hooks/` and `scripts/` folders ship the `guard-pwsh-continuation` hook the same way (see the Hooks section).
 
 ### Option B: User-level agents
 
@@ -264,6 +266,50 @@ skills/
 - **After presenting** the title and description it asks how to proceed: create the PR as-is (through the session's built-in PR creation skills when present, otherwise `gh pr create`, confirming the target branch first), create it as a draft when the user has not specified, or text only. Freeform input revises it.
 - **Deployment**: same model as the other skills; discovered at `.github/skills/pr-description/`.
 
+## Hooks
+
+The repo ships hooks the same way as agents and skills, with configs and scripts separated so the `hooks/` folder stays a flat list of JSON files as the collection grows:
+
+- **`hooks/`** holds the JSON hook configs. The Copilot SDK harness discovers every `*.json` in a project's `.github/hooks/`.
+- **`scripts/`** holds the companion scripts, one subfolder per hook.
+
+```text
+hooks/
+└── guard-pwsh-continuation.json            # PreToolUse hook config
+
+scripts/
+└── guard-pwsh-continuation/
+    ├── guard-pwsh-continuation.ps1         # the guard
+    └── test-guard-pwsh-continuation.ps1   # out-of-process test battery
+```
+
+Copy `hooks/` into `.github/hooks/` and `scripts/` into `.github/scripts/` of your project, and Copilot SDK sessions (VS Code Agents window or Chat view Copilot sessions on the Agent Host, and Copilot CLI, which share the same SDK hook implementation) pick the hook up on their own.
+
+### guard-pwsh-continuation
+
+Denies a shell command that would leave the terminal at the PowerShell continuation prompt (`>>`) instead of executing. Such a command produces no output and blocks the tool call until someone presses Ctrl+C, which wastes a whole tool round. The guard parses the command with the official PowerShell parser, the same mechanism PSReadLine uses to decide whether to show `>>`, and denies it with a rewrite hint when the parser flags the input as incomplete. Commands with hard syntax errors still execute and fail fast, so they pass through; only the hang case is denied.
+
+The hook is adapted to the **Copilot SDK harness only**:
+
+- **Tool naming**: configured with the PascalCase `PreToolUse` event, the harness delivers the VS Code compatible payload and reports the Claude tool name `Bash` for its `powershell`/`bash` runtime tools, so the guard checks `Bash` (with the runtime name `powershell` as a defensive fallback) and ignores every other tool. The matcher in the JSON (`"Bash"`) keeps the harness from even invoking the script for other tools.
+- **Decision output**: the deny uses the flat `permissionDecision` + `permissionDecisionReason` JSON documented for the Copilot SDK harness. Harnesses that expect the nested `hookSpecificOutput` shape (the VS Code Local harness, Claude Code) ignore it, so the hook is a no-op there even if they load the same file.
+- **Non-Windows no-op**: the `bash` command field in the JSON is an explicit `exit 0`. Linux, macOS, and Copilot cloud agent sessions run bash commands, which a PowerShell parse cannot judge, and the cloud agent sandbox honors only the `bash` field anyway. The script also allows everything when it is not running on Windows, as a second layer of the same protection.
+
+Operational notes:
+
+- **Prerequisite**: Windows sessions need PowerShell 7 (`pwsh`) on `PATH`. Copilot SDK `preToolUse` command hooks fail closed (a failed launch or non-zero exit denies the tool call), so without `pwsh` every shell command would be denied. Remove `hooks/guard-pwsh-continuation.json` to uninstall the guard; `scripts/` is inert without its config.
+- **Timeouts fail open**: a slow or hung guard only surfaces a warning and lets the command proceed.
+- **Sandboxed Copilot CLI sessions** run repo hooks inside the sandbox with the session's file access, so the script under `.github/scripts/` stays reachable; `cwd` and `env` fields do not widen that access.
+- **Keep one copy**: all hook sources are combined and every entry runs. If you also keep a user-level copy in `%USERPROFILE%\.copilot\hooks\` (or `~/.copilot/hooks/`), drop one of the two so each command is not parsed twice.
+
+The guard is the one squad component that names tools. A `PreToolUse` filter must match concrete tool names, so it cannot be fully harness-agnostic like the agents; instead it scopes itself to the Copilot SDK harness names and stays a no-op everywhere else.
+
+Run the test battery from the repo root (or from a deployed `.github/scripts/guard-pwsh-continuation/`):
+
+```powershell
+pwsh -NoProfile -File scripts/guard-pwsh-continuation/test-guard-pwsh-continuation.ps1
+```
+
 ## Working with the built-in workflow skills
 
 The VS Code Agents window (built on the Copilot SDK harness) ships its own workflow skills for commits and pull requests: `commit`, `create-pr`, `create-draft-pr`, and `update-pr`. The squad's `commit-message` and `pr-description` skills are built to compose with them instead of competing:
@@ -348,8 +394,10 @@ Common tweaks you can make:
 
 - <https://code.visualstudio.com/docs/agent-customization/custom-agents>
 - <https://code.visualstudio.com/docs/agent-customization/agent-skills>
+- <https://code.visualstudio.com/docs/agent-customization/hooks>
 - <https://code.visualstudio.com/docs/agents/run/subagents>
 - <https://code.visualstudio.com/docs/agents/run/tools>
+- <https://docs.github.com/en/copilot/reference/hooks-reference>
 
 ## License
 
