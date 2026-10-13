@@ -61,6 +61,8 @@ flowchart LR
 
 **Hook files in this repo:** in [`hooks/`](hooks/) and [`scripts/guard-pwsh-continuation/`](scripts/guard-pwsh-continuation/): the `guard-pwsh-continuation` PreToolUse config plus its companion script and test battery (see the Hooks section).
 
+**Installer files in this repo:** [`install.ps1`](install.ps1) installs or uninstalls the agents, skills, and hooks at user level or repo level, and [`test-install.ps1`](test-install.ps1) is its test battery (see the Scripted install section).
+
 ## Harness-agnostic design
 
 The squad avoids naming tools so it does not break when the underlying Copilot SDK renames or reshapes them:
@@ -77,6 +79,29 @@ If a harness lacks a capability the squad depends on, such as asking the user, r
 
 - VS Code with Copilot custom agents support (Agents window or Chat view)
 
+### Scripted install (install.ps1)
+
+From a clone of this repo, run without arguments to get the interactive menu:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1
+```
+
+The menu asks whether to install or uninstall, which components to include (one or more of `agents`, `skills`, and `hooks`, for example by entering `2,3`, or `all` for everything), and whether to install at the user level (`~/.copilot/`) or the repo level (a project's `.github/` folder). It shows the plan and a confirmation before touching anything. Installs overwrite conflicting files by name; uninstalls remove only the squad's own files and list anything else matching a squad name (such as `.disabled` renames) for manual review.
+
+For scripted use, flags replace the menu:
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Action install -Components all -Level user
+```
+
+- `-Components` picks the parts: one or more of `agents`, `skills`, and `hooks` (comma separated, for example `-Components agents,skills`), or `all` for everything, which cannot be combined with named components. The hooks component installs the hook JSON and its companion script together and rewrites the JSON's placeholder script path for the chosen level, so no manual path edit remains.
+- `-Level user` (default) writes under `%USERPROFILE%\.copilot\`. `-Level repo` writes under the project's `.github\` folder and requires `-ProjectRoot <path>`.
+- `-UserRoot <path>` overrides the user-level target root for one run, mainly for previews into a scratch folder; repo-level runs do not accept it.
+- `-Action uninstall` uses the same component and level choices to remove the squad's files. Add `-WhatIf` to either action for a dry run that only prints the plan.
+
+The installer's test battery verifies the whole script against disposable temp folders; run it from the repo root with `pwsh -NoProfile -File test-install.ps1`.
+
 ### Option A: Repo-level agents (recommended)
 
 Copy the agent profiles into:
@@ -85,9 +110,11 @@ Copy the agent profiles into:
 
 This makes them available for that repository/workspace. In this repo the profiles live in [`agents/`](agents/), so copying (or linking) that folder's files into your project's `.github/agents/` is enough; the `skills/` folder ships `agents-md`, `commit-message`, and `pr-description` the same way; and the `hooks/` and `scripts/` folders ship the `guard-pwsh-continuation` hook, whose install steps (including the required script-path edit in the JSON) are in the Hooks section.
 
+The scripted install performs the same copies: run it with `-Level repo -ProjectRoot <the project>` (see the Scripted install section).
+
 ### Option B: User-level agents
 
-Create user-level custom agents with the **Agent Customizations editor** (or the **Chat: New Custom Agent** command), or place the `.agent.md` files in `~/.copilot/agents/`, the folder agent host sessions read user-level agents from.
+Create user-level custom agents with the **Agent Customizations editor** (or the **Chat: New Custom Agent** command), or place the `.agent.md` files in `~/.copilot/agents/`, the folder agent host sessions read user-level agents from. From a squad clone, `install.ps1 -Level user` fills the same folders.
 
 This makes them available across your workspaces.
 
@@ -298,6 +325,8 @@ One install covers every Copilot SDK session in every workspace: VS Code Agents 
 2. Copy `hooks/guard-pwsh-continuation.json` into `%USERPROFILE%\.copilot\hooks\`.
 3. Edit the copied JSON so the `pwsh -File` argument is the absolute path to the script: replace the `C:/Users/YOUR-PROFILE` segment with your Windows profile folder (for example, the folder shown by `%USERPROFILE%`).
 
+The install script with `-Components hooks` performs these three steps (including the placeholder edit) automatically.
+
 Step 3 is required before the guard works, and the hook fails closed until that edit is applied: the shipped `-File` path is a placeholder, `pwsh` cannot launch a missing script file and exits non-zero, and the Copilot SDK harness treats a non-zero hook exit as a deny for every matched shell command.
 
 The absolute path is required because the harness derives the hook command's working directory from the session, not from the JSON file's location: the repository root when the session's working directory sits inside a git repository, the session's working directory otherwise, and the system temp dir when neither is usable. A repo-relative `-File` path would resolve against whichever project each session runs over, and deny shell commands in every project that has not deployed the script at that path.
@@ -327,6 +356,8 @@ Copy `scripts/guard-pwsh-continuation/` into `.github/scripts/` of the project, 
 
 The relative path is safe because the hook command's working directory is the project's repository root, so `.github/scripts/...` resolves for every session over that repository. This is also the install level that stays reachable inside sandboxed Copilot CLI sessions and the only one cloud agent jobs read (see the operational notes).
 
+The install script creates this JSON from the shipped template with `-Components hooks -Level repo -ProjectRoot <the project>`.
+
 ### guard-pwsh-continuation
 
 Denies a shell command that would leave the terminal at the PowerShell continuation prompt (`>>`) instead of executing. Such a command produces no output and blocks the tool call until someone presses Ctrl+C, which wastes a whole tool round. The guard parses the command with the official PowerShell parser, the same mechanism PSReadLine uses to decide whether to show `>>`, and denies it with a rewrite hint when the parser flags the input as incomplete. Commands with hard syntax errors still execute and fail fast, so they pass through; only the hang case is denied.
@@ -343,6 +374,7 @@ Operational notes:
 - **Timeouts fail open**: a slow or hung guard only surfaces a warning and lets the command proceed.
 - **Sandboxed Copilot CLI sessions** run repo hooks inside the sandbox with the session's file access, so the repo-level script under `.github/scripts/` stays reachable. The `cwd` and `env` fields do not widen that access. A user-level script under `%USERPROFILE%\.copilot\scripts\` sits outside the workspace, so inside a sandbox the user-level instance may be unreachable, which surfaces a warning once per hook and session for that instance. Cloud agent jobs load only repo-level hook files from the cloned repository and honor only the `bash` field (`exit 0`), so the guard is absent there, which is fine because cloud jobs run bash sessions anyway.
 - **Keep one copy**: all hook sources are combined and every entry runs. If the same guard is installed at two levels (a user-level copy plus a project's `.github/hooks/` copy), each matched command is parsed twice, so drop one of the two.
+- **Uninstall script**: `install.ps1 -Action uninstall` with the same component and level choices removes exactly the squad's files at that level (the hooks choice includes the companion script) and leaves every other file alone. Any remaining item that matches a squad name, such as a `.disabled` rename, is listed for manual cleanup instead of deleted.
 
 The guard is the one squad component that names tools. A `PreToolUse` filter must match concrete tool names, so it cannot be fully harness-agnostic like the agents; instead it scopes itself to the Copilot SDK harness names and stays a no-op everywhere else.
 
