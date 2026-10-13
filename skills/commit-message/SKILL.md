@@ -1,6 +1,6 @@
 ---
 name: commit-message
-description: 'Write a Conventional Commits message for the staged changes, and optionally commit them. Use when: asked for a commit message, documenting staged work, or a commit is about to happen. Load this skill before ANY commit, including one a built-in commit workflow skill performs. This skill owns the message style rules, including no Co-authored-by trailer unless the user asks for one.'
+description: 'Write a Conventional Commits message for the staged changes, and optionally commit them. Use when: asked for a commit message, documenting staged work, or a commit is about to happen. Load this skill before ANY commit, including one a built-in commit workflow skill performs. This skill owns the message style rules.'
 argument-hint: '[optional: context such as an issue number]'
 ---
 
@@ -45,7 +45,6 @@ A session may provide a built-in commit workflow skill (the Agents window on the
 - Breaking changes: put `!` right before the `:` in the header (`feat!:` or `fix(scope)!:`; `fix!(scope):` is wrong).
 - Do not wrap a sentence into multiple lines, keep it as a single line.
 - Do not mention any unstaged changes.
-- Do not include any `Co-authored-by` trailer, unless the user explicitly asks for it.
 
 ## Output
 
@@ -55,7 +54,7 @@ Return the message in a single fenced block so it can be copied verbatim. Do not
 
 After presenting the message, ask the user how to proceed, with options to commit it as-is or leave it as message only, plus a freeform reply for anything else.
 
-- **Commit as-is**: commit the staged changes with the presented message exactly as written. When the session provides a built-in commit skill, invoke it and pass the message verbatim, trailer rule included. Otherwise commit yourself using the PowerShell rules below.
+- **Commit as-is**: commit the staged changes with the presented message exactly as written. When the session provides a built-in commit skill, invoke it and pass the message verbatim. Otherwise commit yourself using the PowerShell rules below.
 - **Message only**: report the final message and stop.
 - **Freeform text**: treat it as the requested revision. Apply the changes, present the updated message, and ask again.
 

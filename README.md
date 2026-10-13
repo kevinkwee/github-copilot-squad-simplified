@@ -289,7 +289,7 @@ skills/
 ```
 
 - **`/commit-message`**: reads the staged changes (`git diff --cached`), matches the repo's recent message style, and writes a Conventional Commits message (type, optional scope, imperative single-line description, optional body and footer, `!` before the colon for breaking changes). It never stages files itself, and never mentions unstaged changes.
-- **Style authority**: load it before any commit, including one a built-in commit workflow skill performs. It owns the message rules, including the no `Co-authored-by` trailer policy unless the user asks for one.
+- **Style authority**: load it before any commit, including one a built-in commit workflow skill performs. It owns the message rules.
 - **After presenting the message** it asks how to proceed: commit as-is, revise, or leave it as message only. Commit as-is runs through the session's built-in commit skill when one exists; otherwise it commits directly with PowerShell-safe quoting rules (single-quote strategy, or the backtick escape when double quotes are needed), one `-m` per paragraph.
 - **Deployment**: same model as `agents-md`; the skill is discovered at `.github/skills/commit-message/` when this repo is cloned or the `skills/` folder copied into your project's `.github/`.
 
@@ -399,7 +399,6 @@ The VS Code Agents window (built on the Copilot SDK harness) ships its own workf
 
 - **Division of labor**: the built-in skills own the action, meaning the commit itself, the branch push, PR creation, draft mode, and session bookkeeping (the linked PR that later update, merge, and fix-ci workflows use). The squad skills own the content and style, meaning the exact commit message, PR title, and description.
 - **Routing**: the squad skills' descriptions tell the agent to load them before any commit or PR creation, including one a built-in skill performs, because they own the style rules. On a plain "commit my changes" request, the built-in skill acts while the squad skill shapes the message. On "write me a commit message" (or `/commit-message`), the squad skill drafts and presents.
-- **One trailer rule everywhere**: the `commit-message` skill forbids `Co-authored-by` trailers unless the user asks for one. Because the skill is loaded for style before any commit, the rule holds on the built-in path too.
 - **Harness-agnostic fallback**: on harnesses without built-in skills (Copilot CLI, Codex via Agent Host, a plain terminal), the squad skills perform the action themselves with git and `gh`, unchanged.
 
 | Request | Who acts | Content style from |

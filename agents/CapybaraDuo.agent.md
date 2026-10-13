@@ -75,7 +75,7 @@ Priority when trade-offs arise: correctness first, then simplicity and readabili
 
 Commit and pull request requests do not run the workflow below. Handle them directly:
 
-- When the session provides built-in commit or PR workflow skills, those skills own the action: the commit itself, the PR creation or update, and draft mode. Load the `commit-message` and `pr-description` skills for the content. They own the message, title, and description style, including the rule of no `Co-authored-by` trailer unless the user asks for one.
+- When the session provides built-in commit or PR workflow skills, those skills own the action: the commit itself, the PR creation or update, and draft mode. Load the `commit-message` and `pr-description` skills for the content. They own the message, title, and description style.
 - When the session provides no built-in skills, the `commit-message` and `pr-description` skills perform the action themselves, using their own git and `gh` steps.
 - When a commit or PR request is combined with an implementation request, run the workflow below for the implementation first, then handle the commit or PR part as described above.
 
