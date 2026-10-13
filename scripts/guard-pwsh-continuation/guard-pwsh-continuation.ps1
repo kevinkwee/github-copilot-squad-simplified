@@ -34,8 +34,8 @@
       non-zero exit denies the tool call even when stdout reports allow.
       The script therefore exits 0 on every path, including internal
       failure, so a runtime error fails open to allow. On the harness side
-      only a timeout fails open, which is fine: the parse runs in well under
-      the 5 second budget.
+      only a timeout fails open, which is fine: the parse runs in well
+      under the hook's timeout budget.
     - The version gate pins pwsh 7 so the parse grammar matches the shell
       that runs session commands. The hook config launches the script with
       pwsh explicitly, so the gate is a backstop against the script being

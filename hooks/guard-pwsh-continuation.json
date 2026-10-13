@@ -5,7 +5,7 @@
             {
                 "type": "command",
                 "matcher": "Bash",
-                "powershell": "pwsh -NoProfile -ExecutionPolicy Bypass -File .github/scripts/guard-pwsh-continuation/guard-pwsh-continuation.ps1",
+                "powershell": "pwsh -NoProfile -ExecutionPolicy Bypass -File C:/Users/YOUR-PROFILE/.copilot/scripts/guard-pwsh-continuation/guard-pwsh-continuation.ps1",
                 "bash": "exit 0",
                 "timeout": 10
             }

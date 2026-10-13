@@ -83,7 +83,7 @@ Copy the agent profiles into:
 
 - `.github/agents/*.agent.md`
 
-This makes them available for that repository/workspace. In this repo the profiles live in [`agents/`](agents/), so copying (or linking) that folder's files into your project's `.github/agents/` is enough; the `skills/` folder ships `agents-md`, `commit-message`, and `pr-description` the same way; and the `hooks/` and `scripts/` folders ship the `guard-pwsh-continuation` hook the same way (see the Hooks section).
+This makes them available for that repository/workspace. In this repo the profiles live in [`agents/`](agents/), so copying (or linking) that folder's files into your project's `.github/agents/` is enough; the `skills/` folder ships `agents-md`, `commit-message`, and `pr-description` the same way; and the `hooks/` and `scripts/` folders ship the `guard-pwsh-continuation` hook, whose install steps (including the required script-path edit in the JSON) are in the Hooks section.
 
 ### Option B: User-level agents
 
@@ -277,12 +277,12 @@ skills/
 
 The repo ships hooks the same way as agents and skills, with configs and scripts separated so the `hooks/` folder stays a flat list of JSON files as the collection grows:
 
-- **`hooks/`** holds the JSON hook configs. The Copilot SDK harness discovers every `*.json` in a project's `.github/hooks/`.
-- **`scripts/`** holds the companion scripts, one subfolder per hook.
+- **`hooks/`** holds the JSON hook configs. The Copilot SDK harness combines all hook sources and runs every entry it finds: user-level `*.json` files in `%USERPROFILE%\.copilot\hooks\` (or `~/.copilot/hooks/`), and repo-level `*.json` files in a project's `.github/hooks/`.
+- **`scripts/`** holds the companion scripts, one subfolder per hook, at the same install depth: `%USERPROFILE%\.copilot\scripts\` for user-level installs, `.github/scripts/` for repo-level installs.
 
 ```text
 hooks/
-└── guard-pwsh-continuation.json            # PreToolUse hook config
+└── guard-pwsh-continuation.json            # PreToolUse hook config (user-level form)
 
 scripts/
 └── guard-pwsh-continuation/
@@ -290,9 +290,42 @@ scripts/
     └── test-guard-pwsh-continuation.ps1   # out-of-process test battery
 ```
 
-Copy `hooks/` into `.github/hooks/` and `scripts/` into `.github/scripts/` of your project, and Copilot SDK sessions (VS Code Agents window or Chat view Copilot sessions on the Agent Host, and Copilot CLI, which share the same SDK hook implementation) pick the hook up on their own.
+### User-level install (recommended)
+
+One install covers every Copilot SDK session in every workspace: VS Code Agents window and Chat view Copilot sessions on the Agent Host, and Copilot CLI, which share the same SDK hook implementation.
+
+1. Copy `scripts/guard-pwsh-continuation/` into `%USERPROFILE%\.copilot\scripts\`.
+2. Copy `hooks/guard-pwsh-continuation.json` into `%USERPROFILE%\.copilot\hooks\`.
+3. Edit the copied JSON so the `pwsh -File` argument is the absolute path to the script: replace the `C:/Users/YOUR-PROFILE` segment with your Windows profile folder (for example, the folder shown by `%USERPROFILE%`).
+
+Step 3 is required before the guard works, and the hook fails closed until that edit is applied: the shipped `-File` path is a placeholder, `pwsh` cannot launch a missing script file and exits non-zero, and the Copilot SDK harness treats a non-zero hook exit as a deny for every matched shell command.
+
+The absolute path is required because the harness derives the hook command's working directory from the session, not from the JSON file's location: the repository root when the session's working directory sits inside a git repository, the session's working directory otherwise, and the system temp dir when neither is usable. A repo-relative `-File` path would resolve against whichever project each session runs over, and deny shell commands in every project that has not deployed the script at that path.
 
 To verify the guard functionally, ask an agent in a Copilot session to run an incomplete PowerShell command (for example a `Write-Host` with an unclosed quote). The guard denies the call with a rewrite hint instead of letting it hang.
+
+### Repo-level install (team-shared projects)
+
+Copy `scripts/guard-pwsh-continuation/` into `.github/scripts/` of the project, then create `.github/hooks/guard-pwsh-continuation.json` in the same project from the repo-relative form:
+
+```json
+{
+    "version": 1,
+    "hooks": {
+        "PreToolUse": [
+            {
+                "type": "command",
+                "matcher": "Bash",
+                "powershell": "pwsh -NoProfile -ExecutionPolicy Bypass -File .github/scripts/guard-pwsh-continuation/guard-pwsh-continuation.ps1",
+                "bash": "exit 0",
+                "timeout": 10
+            }
+        ]
+    }
+}
+```
+
+The relative path is safe because the hook command's working directory is the project's repository root, so `.github/scripts/...` resolves for every session over that repository. This is also the install level that stays reachable inside sandboxed Copilot CLI sessions and the only one cloud agent jobs read (see the operational notes).
 
 ### guard-pwsh-continuation
 
@@ -306,14 +339,14 @@ The hook is adapted to the **Copilot SDK harness only**:
 
 Operational notes:
 
-- **Prerequisite**: Windows sessions need PowerShell 7 (`pwsh`) on `PATH`. Copilot SDK `preToolUse` command hooks fail closed (a failed launch or non-zero exit denies the tool call), so without `pwsh` every shell command would be denied. Remove `hooks/guard-pwsh-continuation.json` to uninstall the guard; `scripts/` is inert without its config.
+- **Prerequisite**: Windows sessions need PowerShell 7 (`pwsh`) on `PATH`. Copilot SDK `preToolUse` command hooks fail closed (a failed launch or non-zero exit denies the tool call), so without `pwsh` every shell command would be denied. Remove the hook JSON from its install location (user-level: `%USERPROFILE%\.copilot\hooks\`; repo-level: `.github/hooks/`) to uninstall the guard, since `scripts/` is inert without its config.
 - **Timeouts fail open**: a slow or hung guard only surfaces a warning and lets the command proceed.
-- **Sandboxed Copilot CLI sessions** run repo hooks inside the sandbox with the session's file access, so the script under `.github/scripts/` stays reachable; `cwd` and `env` fields do not widen that access.
-- **Keep one copy**: all hook sources are combined and every entry runs. If you also keep a user-level copy in `%USERPROFILE%\.copilot\hooks\` (or `~/.copilot/hooks/`), drop one of the two so each command is not parsed twice.
+- **Sandboxed Copilot CLI sessions** run repo hooks inside the sandbox with the session's file access, so the repo-level script under `.github/scripts/` stays reachable. The `cwd` and `env` fields do not widen that access. A user-level script under `%USERPROFILE%\.copilot\scripts\` sits outside the workspace, so inside a sandbox the user-level instance may be unreachable, which surfaces a warning once per hook and session for that instance. Cloud agent jobs load only repo-level hook files from the cloned repository and honor only the `bash` field (`exit 0`), so the guard is absent there, which is fine because cloud jobs run bash sessions anyway.
+- **Keep one copy**: all hook sources are combined and every entry runs. If the same guard is installed at two levels (a user-level copy plus a project's `.github/hooks/` copy), each matched command is parsed twice, so drop one of the two.
 
 The guard is the one squad component that names tools. A `PreToolUse` filter must match concrete tool names, so it cannot be fully harness-agnostic like the agents; instead it scopes itself to the Copilot SDK harness names and stays a no-op everywhere else.
 
-Run the test battery from the repo root (or from a deployed `.github/scripts/guard-pwsh-continuation/`):
+Run the test battery from the repo root (or from a deployed `scripts/guard-pwsh-continuation/` folder at either install level):
 
 ```powershell
 pwsh -NoProfile -File scripts/guard-pwsh-continuation/test-guard-pwsh-continuation.ps1
