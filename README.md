@@ -92,10 +92,11 @@ The menu asks whether to install or uninstall, which components to include (one 
 For scripted use, flags replace the menu:
 
 ```powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Action install -Components all -Level user
+pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Action install -Components all -Level user -OwlModel 'GLM-5.3' -OwlReasoningEffort high -CatModel 'flash' -CatReasoningEffort low
 ```
 
-- `-Components` picks the parts: one or more of `agents`, `skills`, and `hooks` (comma separated, for example `-Components agents,skills`), or `all` for everything, which cannot be combined with named components. The hooks component installs the hook JSON and its companion script together and rewrites the JSON's placeholder script path for the chosen level, so no manual path edit remains.
+- `-Components` picks the parts: one or more of `agents`, `skills`, and `hooks` (comma separated, for example `-Components agents,skills`), or `all` for everything, which cannot be combined with named components. The hooks component installs the hook JSON and its companion script together and rewrites the JSON's placeholder script path for the chosen level, so no manual path edit remains. The agents component rewrites the per-subagent model and effort placeholders inside the installed `Capybara` and `Capybara Duo` files the same way.
+- `-OwlModel <id or name part>`, `-OwlReasoningEffort <effort>`, `-CatModel <id or name part>`, and `-CatReasoningEffort <effort>` supply the per-subagent values the installer writes into those placeholders. Scripted installs that include the `agents` component on the install action require all four, and they fail fast for any other run. Interactive runs are asked for the same four values (see the Subagent model note).
 - `-Level user` (default) writes under `%USERPROFILE%\.copilot\`. `-Level repo` writes under the project's `.github\` folder and requires `-ProjectRoot <path>`.
 - `-UserRoot <path>` overrides the user-level target root for one run, mainly for previews into a scratch folder; repo-level runs do not accept it.
 - `-Action uninstall` uses the same component and level choices to remove the squad's files. Add `-WhatIf` to either action for a dry run that only prints the plan.
@@ -108,19 +109,27 @@ Copy the agent profiles into:
 
 - `.github/agents/*.agent.md`
 
-This makes them available for that repository/workspace. In this repo the profiles live in [`agents/`](agents/), so copying (or linking) that folder's files into your project's `.github/agents/` is enough; the `skills/` folder ships `agents-md`, `commit-message`, and `pr-description` the same way; and the `hooks/` and `scripts/` folders ship the `guard-pwsh-continuation` hook, whose install steps (including the required script-path edit in the JSON) are in the Hooks section.
+This makes them available for that repository/workspace. In this repo the profiles live in [`agents/`](agents/), so copying (or linking) that folder's files into your project's `.github/agents/` is enough once you replace the Owl and Cat placeholders in the two Capybara files (see the Subagent model note); the `skills/` folder ships `agents-md`, `commit-message`, and `pr-description` the same way; and the `hooks/` and `scripts/` folders ship the `guard-pwsh-continuation` hook, whose install steps (including the required script-path edit in the JSON) are in the Hooks section.
 
-The scripted install performs the same copies: run it with `-Level repo -ProjectRoot <the project>` (see the Scripted install section).
+The scripted install performs the same copies and fills the placeholders by itself: run it with `-Level repo -ProjectRoot <the project>` (see the Scripted install section).
 
 ### Option B: User-level agents
 
-Create user-level custom agents with the **Agent Customizations editor** (or the **Chat: New Custom Agent** command), or place the `.agent.md` files in `~/.copilot/agents/`, the folder agent host sessions read user-level agents from. From a squad clone, `install.ps1 -Level user` fills the same folders.
+Create user-level custom agents with the **Agent Customizations editor** (or the **Chat: New Custom Agent** command), or place the `.agent.md` files in `~/.copilot/agents/`, the folder agent host sessions read user-level agents from. From a squad clone, run `install.ps1` without flags and choose user level at the menu, or run the scripted form from the Scripted install section with `-Level user`. Both fill the same folders.
+
+Files placed by hand must have their placeholders replaced too, same as Option A.
 
 This makes them available across your workspaces.
 
-### Pinned model note
+### Subagent model note
 
-The shipped agents pin `model: GLM-5.3 (litellm-connector)` (`Cat` uses `GLM-5.3-Flash (litellm-connector)`). That pin is a personal setup choice, not a requirement. If that model is not available in your VS Code, pick your model from the chat model picker, or edit `model:` in each agent file to your model (or remove the line to always inherit the session default).
+The agents do not pin `model:` frontmatter. The Agents window ignores a `target:` pin and mishandles a pinned `model:` that comes from an extension (a connector model), so the squad does not rely on frontmatter for this. Instead, Capybara's delegation rule sets what Owl and Cat run on. When the calling tool supports choosing both the model and the reasoning effort, Capybara runs them on the configured values, unless the user names a model for the call at run time. Otherwise they run on the tool's defaults.
+
+Each reviewer has its own pair, shipped as placeholders: Owl gets `__OWL_MODEL__` and `__OWL_REASONING_EFFORT__`, Cat gets `__CAT_MODEL__` and `__CAT_REASONING_EFFORT__`, and the installer fills all four. The `Capybara Duo` file carries only the Owl pair. The model values may be the full id or a distinctive part of the name, for example `GLM-5.3`. They do not have to match exactly. At run time Capybara runs each reviewer on the first available model that matches its value, and asks how to proceed when nothing available matches.
+
+The interactive menu asks for the four values, and scripted installs that include the `agents` component take `-OwlModel`, `-OwlReasoningEffort`, `-CatModel`, and `-CatReasoningEffort` instead. If you copy files manually without the installer, replace the placeholders yourself right after copying. An installed file with a placeholder left in place leaves the reviewers on an unfilled model name, so their calls do not resolve until you fix it.
+
+Reasoning effort values differ per harness. `low`, `medium`, and `high` are the common choices.
 
 ### Use it
 
@@ -456,7 +465,7 @@ This creates a lightweight audit trail of what was implemented and what was revi
 
 Common tweaks you can make:
 
-- Change models in frontmatter (`model:`)
+- Change the subagent model and reasoning effort: re-run the installer with the same component and level to rewrite the installed Capybara files, or edit the model and reasoning effort values inside the Subagent Delegation Rules of the installed `Capybara` and `Capybara Duo` files
 - Pin a tool list in frontmatter (`tools:`) if you want to restrict access. The shipped agents omit `tools:` and inherit the harness defaults, so SDK tool renames cannot break them
 - Switch between Trio (`Capybara`) and Duo (`Capybara Duo`)
 - Adjust code review strictness in `Owl`

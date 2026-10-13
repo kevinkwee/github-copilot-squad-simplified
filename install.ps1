@@ -19,6 +19,15 @@
     A template without the placeholder aborts the run before anything is
     written.
 
+    The agents component rewrites the two Capybara templates the same way,
+    filling the Owl and Cat placeholder pairs with the values collected by
+    the menu, or passed with -OwlModel, -OwlReasoningEffort, -CatModel, and
+    -CatReasoningEffort for scripted runs. The Capybara Duo template receives
+    only the Owl pair. The model values may be full ids, or a distinctive
+    part of the name such as GLM-5.3. The values do not have to match
+    exactly, and the installed delegation rule resolves them to the first
+    available match at run time.
+
 .PARAMETER Action
     install (default) or uninstall.
 
@@ -37,11 +46,32 @@
     Overrides the user-level target root (default $HOME\.copilot), for tests
     and previews.
 
+.PARAMETER OwlModel
+    Model value copied into __OWL_MODEL__ in the installed Capybara
+    templates. May be the full id, or a distinctive part of the name, for
+    example GLM-5.3. Required on scripted installs that include the agents
+    component.
+
+.PARAMETER OwlReasoningEffort
+    Reasoning effort copied into __OWL_REASONING_EFFORT__ in the installed
+    Capybara templates. Required on scripted installs that include the
+    agents component.
+
+.PARAMETER CatModel
+    Model value copied into __CAT_MODEL__ in the installed Capybara template.
+    May be the full id, or a distinctive part of the name. Required on
+    scripted installs that include the agents component.
+
+.PARAMETER CatReasoningEffort
+    Reasoning effort copied into __CAT_REASONING_EFFORT__ in the installed
+    Capybara template. Required on scripted installs that include the
+    agents component.
+
 .EXAMPLE
     pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1
 
 .EXAMPLE
-    pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Action install -Components agents,skills -Level user
+    pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Action install -Components agents,skills -Level user -OwlModel 'GLM-5.3' -OwlReasoningEffort high -CatModel 'flash' -CatReasoningEffort low
 
 .EXAMPLE
     pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Action install -Components hooks -Level repo -ProjectRoot C:\projects\my-app
@@ -64,7 +94,15 @@ param(
 
     [string]$ProjectRoot,
 
-    [string]$UserRoot
+    [string]$UserRoot,
+
+    [string]$OwlModel,
+
+    [string]$OwlReasoningEffort,
+
+    [string]$CatModel,
+
+    [string]$CatReasoningEffort
 )
 
 Set-StrictMode -Version 2.0
@@ -77,6 +115,12 @@ $HookJsonName = 'guard-pwsh-continuation.json'
 $HookScriptFolder = 'guard-pwsh-continuation'
 $HookUserPlaceholder = 'C:/Users/YOUR-PROFILE'
 $HookRepoPlaceholder = 'C:/Users/YOUR-PROFILE/.copilot/scripts'
+$OwlModelPlaceholder = '__OWL_MODEL__'
+$OwlEffortPlaceholder = '__OWL_REASONING_EFFORT__'
+$CatModelPlaceholder = '__CAT_MODEL__'
+$CatEffortPlaceholder = '__CAT_REASONING_EFFORT__'
+$CapybaraDuoFile = 'CapybaraDuo.agent.md'
+$AgentFilesWithPlaceholders = 'Capybara.agent.md', $CapybaraDuoFile
 $LeftoverPattern = '^(CapybaraDuo|Capybara|Cat|Owl|guard-pwsh-continuation|agents-md|commit-message|pr-description)([._\- ]|$)'
 
 function Read-MenuChoiceIndex {
@@ -123,6 +167,26 @@ function Read-ProjectPathPrompt {
         }
         Write-Host "Folder not found: $candidate" -ForegroundColor Yellow
     }
+}
+
+function Read-NonEmptyPrompt {
+    param(
+        [Parameter(Mandatory)][string]$Prompt,
+        [Parameter(Mandatory)][string]$Example
+    )
+    $attempt = 0
+    while ($attempt -lt 10) {
+        $attempt++
+        Write-Host ''
+        Write-Host $Prompt
+        Write-Host ('  {0}' -f $Example)
+        $answer = [string](Read-Host 'Enter a value')
+        if (-not [string]::IsNullOrWhiteSpace($answer)) {
+            return $answer.Trim()
+        }
+        Write-Host 'Please enter a non-empty value.' -ForegroundColor Yellow
+    }
+    throw 'No valid value was entered.'
 }
 
 function Read-ComponentMenu {
@@ -200,11 +264,23 @@ function Show-Menu {
         $projectPath = Read-ProjectPathPrompt
     }
 
+    $reviewerSettings = @{ OwlModel = ''; OwlEffort = ''; CatModel = ''; CatEffort = '' }
+    if ($actionValues[$actionIndex] -eq 'install') {
+        $selectedTokens = @($componentSelection)
+        if (($selectedTokens -contains 'agents') -or ($selectedTokens -contains 'all')) {
+            $reviewerSettings.OwlModel = Read-NonEmptyPrompt -Prompt 'Which model should Owl run on? Type any distinctive part of a model name.' -Example 'for example: GLM-5.3'
+            $reviewerSettings.OwlEffort = Read-NonEmptyPrompt -Prompt 'Which reasoning effort should Owl use?' -Example 'for example: high (common values are low, medium, high)'
+            $reviewerSettings.CatModel = Read-NonEmptyPrompt -Prompt 'Which model should Cat run on? Type any distinctive part of a model name.' -Example 'for example: flash'
+            $reviewerSettings.CatEffort = Read-NonEmptyPrompt -Prompt 'Which reasoning effort should Cat use?' -Example 'for example: low (common values are low, medium, high)'
+        }
+    }
+
     return @{
         Action = $actionValues[$actionIndex]
         Components = $componentSelection
         Level = $levelValues[$levelIndex]
         ProjectPath = $projectPath
+        ReviewerSettings = $reviewerSettings
     }
 }
 
@@ -248,6 +324,36 @@ function Confirm-ParameterCombo {
     }
     if ($Level -eq 'repo' -and [string]::IsNullOrWhiteSpace($ProjectRoot)) {
         throw "A repo-level $Action requires -ProjectRoot. Run the script without flags for a guided menu."
+    }
+}
+
+function Get-ReviewerSettings {
+    param(
+        [Parameter(Mandatory)][bool]$InstallingAgents,
+        [Parameter(Mandatory)][bool]$FromMenu
+    )
+    if (-not $InstallingAgents) {
+        if (-not [string]::IsNullOrWhiteSpace($OwlModel) -or
+            -not [string]::IsNullOrWhiteSpace($OwlReasoningEffort) -or
+            -not [string]::IsNullOrWhiteSpace($CatModel) -or
+            -not [string]::IsNullOrWhiteSpace($CatReasoningEffort)) {
+            throw '-OwlModel, -OwlReasoningEffort, -CatModel, and -CatReasoningEffort apply only when installing the agents component.'
+        }
+        return @{ OwlModel = ''; OwlEffort = ''; CatModel = ''; CatEffort = '' }
+    }
+    if ($FromMenu) {
+        return @{ OwlModel = $OwlModel; OwlEffort = $OwlReasoningEffort; CatModel = $CatModel; CatEffort = $CatReasoningEffort }
+    }
+    foreach ($value in $OwlModel, $OwlReasoningEffort, $CatModel, $CatReasoningEffort) {
+        if ([string]::IsNullOrWhiteSpace($value)) {
+            throw 'A scripted install that includes the agents component requires -OwlModel, -OwlReasoningEffort, -CatModel, and -CatReasoningEffort. Run the script without flags for a guided menu.'
+        }
+    }
+    return @{
+        OwlModel = $OwlModel.Trim()
+        OwlEffort = $OwlReasoningEffort.Trim()
+        CatModel = $CatModel.Trim()
+        CatEffort = $CatReasoningEffort.Trim()
     }
 }
 
@@ -311,35 +417,83 @@ function Get-SourceFiles {
     return @(Get-ChildItem -LiteralPath $SourceFolder -Recurse -File)
 }
 
+# Rewrites a shipped template's placeholders, and throws when a placeholder is
+# missing or survives.
+function ConvertTo-RewrittenTemplate {
+    param(
+        [Parameter(Mandatory)][string]$TemplatePath,
+        [Parameter(Mandatory)][hashtable]$Replacements,
+        [string[]]$ForbiddenAfterRewrite = @()
+    )
+    if (-not (Test-Path -LiteralPath $TemplatePath -PathType Leaf)) {
+        throw "Source file missing in the squad repo: $TemplatePath"
+    }
+    # ReadAllText instead of Get-Content: Windows PowerShell 5.1 decodes a
+    # BOM-less file in the system ANSI codepage, while .NET defaults to UTF-8.
+    $raw = [System.IO.File]::ReadAllText($TemplatePath)
+    foreach ($placeholder in $Replacements.Keys) {
+        if (-not $raw.Contains($placeholder)) {
+            throw "The template $TemplatePath does not contain the expected placeholder '$placeholder'. Restore the shipped template, then re-run."
+        }
+        if ([string]::IsNullOrWhiteSpace([string]$Replacements[$placeholder])) {
+            throw "The replacement for '$placeholder' is empty in $TemplatePath, which would leave a broken instruction."
+        }
+    }
+    # The hook's repo path contains the user path, so rewrite longest first to
+    # keep a shorter placeholder from eating the text of a longer one.
+    $rewritten = $raw
+    foreach ($placeholder in @($Replacements.Keys | Sort-Object { $_.Length } -Descending)) {
+        $rewritten = $rewritten.Replace($placeholder, [string]$Replacements[$placeholder])
+    }
+    $checkedPlaceholders = @($Replacements.Keys) + $ForbiddenAfterRewrite
+    foreach ($remainingPlaceholder in $checkedPlaceholders) {
+        if ($rewritten.Contains($remainingPlaceholder)) {
+            throw "The placeholder '$remainingPlaceholder' is still present after rewriting $TemplatePath."
+        }
+    }
+    return $rewritten
+}
+
 function Get-RewrittenHookJson {
     param([Parameter(Mandatory)][string]$TargetLevel)
     $sourceJsonPath = Join-Path (Join-Path $RepoRoot 'hooks') $HookJsonName
-    if (-not (Test-Path -LiteralPath $sourceJsonPath -PathType Leaf)) {
-        throw "Source file missing in the squad repo: $sourceJsonPath"
-    }
-    $raw = Get-Content -LiteralPath $sourceJsonPath -Raw
-    $placeholder = $HookUserPlaceholder
-    if ($TargetLevel -eq 'repo') {
-        $placeholder = $HookRepoPlaceholder
-    }
-    if (-not $raw.Contains($placeholder)) {
-        throw "The hook template $sourceJsonPath does not contain the expected placeholder '$placeholder'. Restore the shipped template, then re-run."
-    }
-
+    $homePath = ($HOME -replace '\\', '/').TrimEnd('/')
+    $repoPathSuffix = $HookRepoPlaceholder.Substring($HookUserPlaceholder.Length)
     if ($TargetLevel -eq 'user') {
-        $replacement = ($HOME -replace '\\', '/').TrimEnd('/')
+        $rewritten = ConvertTo-RewrittenTemplate -TemplatePath $sourceJsonPath -Replacements @{
+            $HookUserPlaceholder = $homePath
+            $HookRepoPlaceholder = ($homePath + $repoPathSuffix)
+        }
     }
     else {
-        $replacement = '.github/scripts'
-    }
-    $rewritten = $raw.Replace($placeholder, $replacement)
-    foreach ($remainingPlaceholder in $HookUserPlaceholder, $HookRepoPlaceholder) {
-        if ($rewritten.Contains($remainingPlaceholder)) {
-            throw "The hook placeholder '$remainingPlaceholder' is still present after rewriting."
-        }
+        # Repo level keeps no profile path at all, so a user path outside the
+        # repo placeholder aborts instead of being rewritten.
+        $rewritten = ConvertTo-RewrittenTemplate -TemplatePath $sourceJsonPath -Replacements @{
+            $HookRepoPlaceholder = '.github/scripts'
+        } -ForbiddenAfterRewrite @($HookUserPlaceholder)
     }
     $null = $rewritten | ConvertFrom-Json
     return $rewritten
+}
+
+function Get-RewrittenAgentFile {
+    param(
+        [Parameter(Mandatory)][string]$AgentFilePath,
+        [Parameter(Mandatory)][string]$AgentFileName,
+        [Parameter(Mandatory)][hashtable]$Settings
+    )
+    $replacements = @{
+        $OwlModelPlaceholder = $Settings.OwlModel
+        $OwlEffortPlaceholder = $Settings.OwlEffort
+    }
+    if ($AgentFileName -eq $CapybaraDuoFile) {
+        # Cat values have no meaning in Duo mode, so a Cat token that leaks
+        # into the template is forbidden, not filled.
+        return ConvertTo-RewrittenTemplate -TemplatePath $AgentFilePath -Replacements $replacements -ForbiddenAfterRewrite @($CatModelPlaceholder, $CatEffortPlaceholder)
+    }
+    $replacements[$CatModelPlaceholder] = $Settings.CatModel
+    $replacements[$CatEffortPlaceholder] = $Settings.CatEffort
+    return ConvertTo-RewrittenTemplate -TemplatePath $AgentFilePath -Replacements $replacements
 }
 
 function Get-InstallOperationPlan {
@@ -347,7 +501,8 @@ function Get-InstallOperationPlan {
         [Parameter(Mandatory)][string]$ActionValue,
         [string[]]$ComponentsValue = @('all'),
         [Parameter(Mandatory)][hashtable]$Targets,
-        [Parameter(Mandatory)][string]$TargetLevel
+        [Parameter(Mandatory)][string]$TargetLevel,
+        [Parameter(Mandatory)][hashtable]$ReviewerSettings
     )
     $componentSelection = 'agents', 'skills', 'hooks'
     if (@($ComponentsValue) -notcontains 'all') {
@@ -362,13 +517,19 @@ function Get-InstallOperationPlan {
     foreach ($component in $componentSelection) {
         if ($component -eq 'agents') {
             foreach ($agentFileName in $AgentFiles) {
-                $fileOps += @{
+                $agentOp = @{
                     Component = 'agents'
                     Source = Join-Path (Join-Path $RepoRoot 'agents') $agentFileName
                     Target = Join-Path $Targets.Agents $agentFileName
                     Display = Join-Path 'agents' $agentFileName
                     RewrittenContent = $null
                 }
+                if ($ActionValue -eq 'install' -and $AgentFilesWithPlaceholders -contains $agentFileName) {
+                    # The rewrite is resolved while planning, so a broken
+                    # template aborts the whole run before any file is written.
+                    $agentOp.RewrittenContent = Get-RewrittenAgentFile -AgentFilePath $agentOp.Source -AgentFileName $agentFileName -Settings $ReviewerSettings
+                }
+                $fileOps += $agentOp
             }
         }
         elseif ($component -eq 'skills') {
@@ -472,11 +633,11 @@ function Invoke-InstallPlan {
         $existed = Test-Path -LiteralPath $fileOp.Target -PathType Leaf
         if ($fileOp.RewrittenContent) {
             if ($WhatIfPreference) {
-                Write-Host ('What if: writing rewritten hook JSON to {0}' -f $fileOp.Target)
+                Write-Host ('What if: writing rewritten content to {0}' -f $fileOp.Target)
             }
             else {
-                # WriteAllText keeps the JSON free of a PowerShell BOM, which
-                # some JSON readers reject.
+                # WriteAllText writes UTF-8 without a BOM. Some JSON readers
+                # reject a BOM, and the shipped templates are BOM-less.
                 [System.IO.File]::WriteAllText($fileOp.Target, $fileOp.RewrittenContent)
             }
         }
@@ -571,17 +732,28 @@ try {
         $Components = $menuChoices.Components
         $Level = $menuChoices.Level
         $ProjectRoot = $menuChoices.ProjectPath
+        $OwlModel = $menuChoices.ReviewerSettings.OwlModel
+        $OwlReasoningEffort = $menuChoices.ReviewerSettings.OwlEffort
+        $CatModel = $menuChoices.ReviewerSettings.CatModel
+        $CatReasoningEffort = $menuChoices.ReviewerSettings.CatEffort
     }
 
     Confirm-ParameterCombo
     $Components = Get-ComponentSelection -RequestedComponents @($Components)
     $targets = Get-TargetFolders -TargetLevel $Level -ProjectPath $ProjectRoot
-    $plan = Get-InstallOperationPlan -ActionValue $Action -ComponentsValue $Components -Targets $targets -TargetLevel $Level
+    $selectedTokens = @($Components)
+    $installingAgents = (($selectedTokens -contains 'agents') -or ($selectedTokens -contains 'all')) -and ($Action -eq 'install')
+    $reviewerSettings = Get-ReviewerSettings -InstallingAgents $installingAgents -FromMenu $useMenu
+    $plan = Get-InstallOperationPlan -ActionValue $Action -ComponentsValue $Components -Targets $targets -TargetLevel $Level -ReviewerSettings $reviewerSettings
 
     Write-Host "Copilot Squad $($Action.ToLowerInvariant())"
     Write-Host "Level: $Level"
     Write-Host "Components: $($Components -join ', ')"
     Write-Host "Target: $($targets.TargetRoot)"
+    if ($installingAgents) {
+        Write-Host ('Owl model: {0} (effort: {1})' -f $reviewerSettings.OwlModel, $reviewerSettings.OwlEffort)
+        Write-Host ('Cat model: {0} (effort: {1})' -f $reviewerSettings.CatModel, $reviewerSettings.CatEffort)
+    }
     Write-Host ''
 
     $proceed = $true

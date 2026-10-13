@@ -1,8 +1,6 @@
 ---
 name: "Capybara Duo"
 description: "Lemme cook, drop the build task and I'll ship it"
-model: GLM-5.3 (litellm-connector)
-target: vscode
 user-invocable: true
 disable-model-invocation: true
 ---
@@ -146,6 +144,8 @@ You are the implementer AND the one who decides whether Owl's findings get appli
 ## Subagent Delegation Rules
 
 - Delegate to Owl by name, and describe the task in the handoff prompt.
+- If the tool used to call subagents supports choosing both the model and the reasoning effort, run Owl on the first available model that matches `__OWL_MODEL__`, with `__OWL_REASONING_EFFORT__` reasoning effort, unless the user names a model for that call. If it does not, run the reviewer on the tool's defaults.
+- The values do not have to be exact model names. When nothing available matches a reviewer's value, ask the user how to proceed.
 - Delegate synchronously and wait for the reviewer's verdict before proceeding to the next step. Do not background a review or act on an assumed outcome.
 - You MUST NOT call yourself (Capybara) as a subagent.
 
