@@ -10,14 +10,23 @@
     the squad's own items, leaves every other item in place, and reports any
     remaining items matching a squad name for manual review.
 
-    The hooks component covers both the hook JSON and its companion script,
-    because a hook whose script cannot be launched fail-closes every shell
-    tool call. The installed hook JSON is rewritten from the shipped template
-    before use, so no placeholder path remains:
+    The hooks component covers each hook JSON and its companion script
+    folder, because a hook whose script cannot be launched fail-closes every
+    tool call of its kind. The installed hook JSONs are rewritten from the
+    shipped templates before use, so no placeholder path remains:
       - user level: the placeholder becomes the real profile's .copilot path
       - repo level: the placeholder becomes the repo-relative .github path
     A template without the placeholder aborts the run before anything is
     written.
+
+    Two hooks ship. The shell guard (guard-pwsh-continuation) always travels
+    with the hooks component. The subagent delegation guard
+    (guard-subagent-delegation) denies a reviewer subagent call that omits
+    the model or reasoning effort field, and travels per -SubagentGuard: Auto
+    installs it with the agents component, Skip leaves it out, and Force
+    installs it into any install that includes the agents or hooks
+    component, for example a hooks-only install when the agents were copied
+    by hand.
 
     The agents component rewrites the two Capybara templates the same way,
     filling the Owl and Cat placeholder pairs with the values collected by
@@ -67,6 +76,15 @@
     Capybara template. Required on scripted installs that include the
     agents component.
 
+.PARAMETER SubagentGuard
+    How the subagent delegation guard hook travels. Auto (default) installs
+    it whenever the agents component is installed. Skip leaves it out and
+    fails fast on any install that does not include the agents component.
+    Force installs it into any install that includes the agents or hooks
+    component, for example a hooks-only install for a hand-maintained
+    agents folder, and fails fast when neither is selected. Only install
+    runs accept a non-Auto value.
+
 .EXAMPLE
     pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1
 
@@ -75,6 +93,9 @@
 
 .EXAMPLE
     pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Action install -Components hooks -Level repo -ProjectRoot C:\projects\my-app
+
+.EXAMPLE
+    pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Action install -Components hooks -Level user -SubagentGuard Force
 
 .EXAMPLE
     pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Action uninstall -Level user
@@ -102,7 +123,10 @@ param(
 
     [string]$CatModel,
 
-    [string]$CatReasoningEffort
+    [string]$CatReasoningEffort,
+
+    [ValidateSet('Auto', 'Skip', 'Force')]
+    [string]$SubagentGuard = 'Auto'
 )
 
 Set-StrictMode -Version 2.0
@@ -111,8 +135,9 @@ $ErrorActionPreference = 'Stop'
 $RepoRoot = [System.IO.Path]::GetFullPath($PSScriptRoot)
 $AgentFiles = 'Capybara.agent.md', 'CapybaraDuo.agent.md', 'Cat.agent.md', 'Owl.agent.md'
 $SkillFolders = 'agents-md', 'commit-message', 'pr-description'
-$HookJsonName = 'guard-pwsh-continuation.json'
-$HookScriptFolder = 'guard-pwsh-continuation'
+$HookShellGuardName = 'guard-pwsh-continuation'
+$HookSubagentGuardName = 'guard-subagent-delegation'
+$HookNames = $HookShellGuardName, $HookSubagentGuardName
 $HookUserPlaceholder = 'C:/Users/YOUR-PROFILE'
 $HookRepoPlaceholder = 'C:/Users/YOUR-PROFILE/.copilot/scripts'
 $OwlModelPlaceholder = '__OWL_MODEL__'
@@ -121,7 +146,7 @@ $CatModelPlaceholder = '__CAT_MODEL__'
 $CatEffortPlaceholder = '__CAT_REASONING_EFFORT__'
 $CapybaraDuoFile = 'CapybaraDuo.agent.md'
 $AgentFilesWithPlaceholders = 'Capybara.agent.md', $CapybaraDuoFile
-$LeftoverPattern = '^(CapybaraDuo|Capybara|Cat|Owl|guard-pwsh-continuation|agents-md|commit-message|pr-description)([._\- ]|$)'
+$LeftoverPattern = '^(CapybaraDuo|Capybara|Cat|Owl|guard-pwsh-continuation|guard-subagent-delegation|agents-md|commit-message|pr-description)([._\- ]|$)'
 
 function Read-MenuChoiceIndex {
     param(
@@ -194,7 +219,7 @@ function Read-ComponentMenu {
         'all (agents, skills, and hooks)',
         'agents (4 custom agent profiles)',
         'skills (3 squad skills)',
-        'hooks (guard hook config and its companion script)')
+        'hooks (2 guard hook configs and their companion scripts)')
     $optionValues = 'all', 'agents', 'skills', 'hooks'
     Write-Host ''
     Write-Host 'Which components? Enter one number, several numbers separated by commas (for example 2,3), or press Enter for [1].'
@@ -265,6 +290,7 @@ function Show-Menu {
     }
 
     $reviewerSettings = @{ OwlModel = ''; OwlEffort = ''; CatModel = ''; CatEffort = '' }
+    $subagentGuard = 'Auto'
     if ($actionValues[$actionIndex] -eq 'install') {
         $selectedTokens = @($componentSelection)
         if (($selectedTokens -contains 'agents') -or ($selectedTokens -contains 'all')) {
@@ -272,6 +298,14 @@ function Show-Menu {
             $reviewerSettings.OwlEffort = Read-NonEmptyPrompt -Prompt 'Which reasoning effort should Owl use?' -Example 'for example: high (common values are low, medium, high)'
             $reviewerSettings.CatModel = Read-NonEmptyPrompt -Prompt 'Which model should Cat run on? Type any distinctive part of a model name.' -Example 'for example: flash'
             $reviewerSettings.CatEffort = Read-NonEmptyPrompt -Prompt 'Which reasoning effort should Cat use?' -Example 'for example: low (common values are low, medium, high)'
+        }
+        elseif ($selectedTokens -contains 'hooks') {
+            $guardIndex = Read-MenuChoiceIndex 'Include the subagent delegation guard hook with the shell guard?' @(
+                'no, install the shell guard only (default)',
+                'yes, also enforce reviewer model and reasoning effort fields') 0
+            if ($guardIndex -eq 1) {
+                $subagentGuard = 'Force'
+            }
         }
     }
 
@@ -281,6 +315,7 @@ function Show-Menu {
         Level = $levelValues[$levelIndex]
         ProjectPath = $projectPath
         ReviewerSettings = $reviewerSettings
+        SubagentGuard = $subagentGuard
     }
 }
 
@@ -418,7 +453,9 @@ function Get-SourceFiles {
 }
 
 # Rewrites a shipped template's placeholders, and throws when a placeholder is
-# missing or survives.
+# missing or survives. Callers resolve rewrites while planning their
+# operations, so a broken template aborts the whole run before any file is
+# written.
 function ConvertTo-RewrittenTemplate {
     param(
         [Parameter(Mandatory)][string]$TemplatePath,
@@ -455,8 +492,11 @@ function ConvertTo-RewrittenTemplate {
 }
 
 function Get-RewrittenHookJson {
-    param([Parameter(Mandatory)][string]$TargetLevel)
-    $sourceJsonPath = Join-Path (Join-Path $RepoRoot 'hooks') $HookJsonName
+    param(
+        [Parameter(Mandatory)][string]$TargetLevel,
+        [Parameter(Mandatory)][string]$HookJsonFileName
+    )
+    $sourceJsonPath = Join-Path (Join-Path $RepoRoot 'hooks') $HookJsonFileName
     $homePath = ($HOME -replace '\\', '/').TrimEnd('/')
     $repoPathSuffix = $HookRepoPlaceholder.Substring($HookUserPlaceholder.Length)
     if ($TargetLevel -eq 'user') {
@@ -496,18 +536,76 @@ function Get-RewrittenAgentFile {
     return ConvertTo-RewrittenTemplate -TemplatePath $AgentFilePath -Replacements $replacements
 }
 
+# Returns the install or uninstall operations for one hook: its rewritten
+# (install) or target-mapped (uninstall) JSON plus the verbatim copy of its
+# companion script folder, with the folder to prune.
+function Get-HookOperationOps {
+    param(
+        [Parameter(Mandatory)][string]$HookName,
+        [Parameter(Mandatory)][hashtable]$Targets,
+        [Parameter(Mandatory)][string]$TargetLevel,
+        [Parameter(Mandatory)][string]$ActionValue
+    )
+    $hookJsonName = $HookName + '.json'
+    $hookJsonSource = Join-Path (Join-Path $RepoRoot 'hooks') $hookJsonName
+    $hookJsonOp = @{
+        Component = 'hooks'
+        Source = $hookJsonSource
+        Target = Join-Path $Targets.Hooks $hookJsonName
+        Display = Join-Path 'hooks' $hookJsonName
+        RewrittenContent = $null
+    }
+    if ($ActionValue -eq 'install') {
+        if (-not (Test-Path -LiteralPath $hookJsonSource -PathType Leaf)) {
+            throw "Source file missing in the squad repo: $hookJsonSource"
+        }
+        $hookJsonOp.RewrittenContent = Get-RewrittenHookJson -TargetLevel $TargetLevel -HookJsonFileName $hookJsonName
+    }
+    $hookOps = @($hookJsonOp)
+    $scriptSourceRoot = Join-Path (Join-Path $RepoRoot 'scripts') $HookName
+    $scriptTargetRoot = Join-Path $Targets.Scripts $HookName
+    foreach ($sourceFile in Get-SourceFiles -SourceFolder $scriptSourceRoot) {
+        $relativePath = Get-RelativePathBelow -FullPath $sourceFile.FullName -BasePath $scriptSourceRoot
+        $hookOps += @{
+            Component = 'hooks'
+            Source = $sourceFile.FullName
+            Target = Join-Path $scriptTargetRoot $relativePath
+            Display = Join-Path (Join-Path 'scripts' $HookName) $relativePath
+            RewrittenContent = $null
+        }
+    }
+    return @{ Ops = $hookOps; Folder = $scriptTargetRoot }
+}
+
 function Get-InstallOperationPlan {
     param(
         [Parameter(Mandatory)][string]$ActionValue,
         [string[]]$ComponentsValue = @('all'),
         [Parameter(Mandatory)][hashtable]$Targets,
         [Parameter(Mandatory)][string]$TargetLevel,
-        [Parameter(Mandatory)][hashtable]$ReviewerSettings
+        [Parameter(Mandatory)][hashtable]$ReviewerSettings,
+        [string]$SubagentGuardMode = 'Auto'
     )
     $componentSelection = 'agents', 'skills', 'hooks'
     if (@($ComponentsValue) -notcontains 'all') {
         $componentSelection = $ComponentsValue
     }
+
+    # The subagent delegation hook travels with the agents on install (the
+    # agents component is the only one that collects reviewer model values),
+    # and Force also lets it travel where the agents component is not
+    # selected, for an install whose agents were copied by hand. An
+    # uninstall removes it whenever the components that could have installed
+    # it are removed, so uninstalling agents alone also cleans the guard.
+    $includeGuardHook = $false
+    if ($ActionValue -eq 'install') {
+        $includeGuardHook = ($SubagentGuardMode -eq 'Force') -or
+            (($SubagentGuardMode -eq 'Auto') -and ($componentSelection -contains 'agents'))
+    }
+    else {
+        $includeGuardHook = ($componentSelection -contains 'agents') -or ($componentSelection -contains 'hooks')
+    }
+    $plannedHookNames = @($HookNames | Where-Object { $_ -ne $HookSubagentGuardName -or $includeGuardHook })
 
     # Only the selected components are planned, so a partial clone can install
     # or remove one component without the other components' sources in place.
@@ -525,8 +623,6 @@ function Get-InstallOperationPlan {
                     RewrittenContent = $null
                 }
                 if ($ActionValue -eq 'install' -and $AgentFilesWithPlaceholders -contains $agentFileName) {
-                    # The rewrite is resolved while planning, so a broken
-                    # template aborts the whole run before any file is written.
                     $agentOp.RewrittenContent = Get-RewrittenAgentFile -AgentFilePath $agentOp.Source -AgentFileName $agentFileName -Settings $ReviewerSettings
                 }
                 $fileOps += $agentOp
@@ -550,38 +646,22 @@ function Get-InstallOperationPlan {
             }
         }
         elseif ($component -eq 'hooks') {
-            $hookJsonSource = Join-Path (Join-Path $RepoRoot 'hooks') $HookJsonName
-            $hookJsonOp = @{
-                Component = 'hooks'
-                Source = $hookJsonSource
-                Target = Join-Path $Targets.Hooks $HookJsonName
-                Display = Join-Path 'hooks' $HookJsonName
-                RewrittenContent = $null
+            foreach ($hookName in $plannedHookNames) {
+                $hookPlan = Get-HookOperationOps -HookName $hookName -Targets $Targets -TargetLevel $TargetLevel -ActionValue $ActionValue
+                $fileOps += $hookPlan.Ops
+                $folderPrunes += @{ Component = 'hooks'; Folder = $hookPlan.Folder }
             }
-            if ($ActionValue -eq 'install') {
-                if (-not (Test-Path -LiteralPath $hookJsonSource -PathType Leaf)) {
-                    throw "Source file missing in the squad repo: $hookJsonSource"
-                }
-                # The rewrite is resolved while planning, so a broken template
-                # aborts the whole run before any file is written.
-                $hookJsonOp.RewrittenContent = Get-RewrittenHookJson -TargetLevel $TargetLevel
-            }
-            $fileOps += $hookJsonOp
-
-            $scriptSourceRoot = Join-Path (Join-Path $RepoRoot 'scripts') $HookScriptFolder
-            $scriptTargetRoot = Join-Path $Targets.Scripts $HookScriptFolder
-            foreach ($sourceFile in Get-SourceFiles -SourceFolder $scriptSourceRoot) {
-                $relativePath = Get-RelativePathBelow -FullPath $sourceFile.FullName -BasePath $scriptSourceRoot
-                $fileOps += @{
-                    Component = 'hooks'
-                    Source = $sourceFile.FullName
-                    Target = Join-Path $scriptTargetRoot $relativePath
-                    Display = Join-Path (Join-Path 'scripts' $HookScriptFolder) $relativePath
-                    RewrittenContent = $null
-                }
-            }
-            $folderPrunes += @{ Component = 'hooks'; Folder = $scriptTargetRoot }
         }
+    }
+
+    # The guard also travels with any install or uninstall whose selection
+    # does not include the hooks component, where the hooks branch above
+    # never executes, so the summary's claim stays true and those uninstalls
+    # still remove the guard.
+    if ($includeGuardHook -and (@($componentSelection) -notcontains 'hooks')) {
+        $guardPlan = Get-HookOperationOps -HookName $HookSubagentGuardName -Targets $Targets -TargetLevel $TargetLevel -ActionValue $ActionValue
+        $fileOps += $guardPlan.Ops
+        $folderPrunes += @{ Component = 'hooks'; Folder = $guardPlan.Folder }
     }
 
     # Only install runs assert source files exist; uninstall removes the
@@ -602,22 +682,30 @@ function Get-InstallOperationPlan {
 
     # The leftover scan only sees top-level entries of the target folders, so
     # these exclusions cover the full map without reading any source file.
+    # The hook entries stay unconditional: a partial uninstall must not
+    # report intact hook files as leftovers just because its own selection
+    # did not plan them.
     $squadPaths = @()
     foreach ($agentFileName in $AgentFiles) {
         $squadPaths += (Join-Path $Targets.Agents $agentFileName)
     }
-    $squadPaths += (Join-Path $Targets.Hooks $HookJsonName)
+    foreach ($hookName in $HookNames) {
+        $squadPaths += (Join-Path $Targets.Hooks ($hookName + '.json'))
+    }
     $squadFolders = @()
     foreach ($skillFolder in $SkillFolders) {
         $squadFolders += (Join-Path $Targets.Skills $skillFolder)
     }
-    $squadFolders += (Join-Path $Targets.Scripts $HookScriptFolder)
+    foreach ($hookName in $HookNames) {
+        $squadFolders += (Join-Path $Targets.Scripts $hookName)
+    }
 
     return @{
         FileOps = $fileOps
         FolderPrunes = $folderPrunes
         SquadPaths = $squadPaths
         SquadFolders = $squadFolders
+        GuardHookIncluded = $includeGuardHook
     }
 }
 
@@ -736,6 +824,7 @@ try {
         $OwlReasoningEffort = $menuChoices.ReviewerSettings.OwlEffort
         $CatModel = $menuChoices.ReviewerSettings.CatModel
         $CatReasoningEffort = $menuChoices.ReviewerSettings.CatEffort
+        $SubagentGuard = $menuChoices.SubagentGuard
     }
 
     Confirm-ParameterCombo
@@ -743,8 +832,18 @@ try {
     $targets = Get-TargetFolders -TargetLevel $Level -ProjectPath $ProjectRoot
     $selectedTokens = @($Components)
     $installingAgents = (($selectedTokens -contains 'agents') -or ($selectedTokens -contains 'all')) -and ($Action -eq 'install')
+    $installingHooks = (($selectedTokens -contains 'hooks') -or ($selectedTokens -contains 'all')) -and ($Action -eq 'install')
+    if ($PSBoundParameters.ContainsKey('SubagentGuard') -and $Action -eq 'uninstall' -and $SubagentGuard -ne 'Auto') {
+        throw '-SubagentGuard applies only to install runs.'
+    }
+    if ($Action -eq 'install' -and $SubagentGuard -eq 'Skip' -and -not $installingAgents) {
+        throw '-SubagentGuard Skip applies only when installing the agents component.'
+    }
+    if ($Action -eq 'install' -and $SubagentGuard -eq 'Force' -and -not ($installingAgents -or $installingHooks)) {
+        throw '-SubagentGuard Force requires the agents or hooks component.'
+    }
     $reviewerSettings = Get-ReviewerSettings -InstallingAgents $installingAgents -FromMenu $useMenu
-    $plan = Get-InstallOperationPlan -ActionValue $Action -ComponentsValue $Components -Targets $targets -TargetLevel $Level -ReviewerSettings $reviewerSettings
+    $plan = Get-InstallOperationPlan -ActionValue $Action -ComponentsValue $Components -Targets $targets -TargetLevel $Level -ReviewerSettings $reviewerSettings -SubagentGuardMode $SubagentGuard
 
     Write-Host "Copilot Squad $($Action.ToLowerInvariant())"
     Write-Host "Level: $Level"
@@ -753,6 +852,13 @@ try {
     if ($installingAgents) {
         Write-Host ('Owl model: {0} (effort: {1})' -f $reviewerSettings.OwlModel, $reviewerSettings.OwlEffort)
         Write-Host ('Cat model: {0} (effort: {1})' -f $reviewerSettings.CatModel, $reviewerSettings.CatEffort)
+    }
+    if ($Action -eq 'install') {
+        $guardSummary = 'not included'
+        if ($plan.GuardHookIncluded) {
+            $guardSummary = 'included'
+        }
+        Write-Host ('Subagent delegation guard: {0}' -f $guardSummary)
     }
     Write-Host ''
 

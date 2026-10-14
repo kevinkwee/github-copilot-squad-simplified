@@ -4,13 +4,13 @@ This file provides guidance to AI coding agents when working with code in this r
 
 ## Project Overview
 
-This repository ships a simplified Copilot Squad for VS Code Copilot custom agents: the agent prompt files under `agents/`, the squad skills under `skills/`, the `guard-pwsh-continuation` hook plus its companion script under `hooks/` and `scripts/`, and the installer `install.ps1` with its test battery `test-install.ps1`. The installed squad runs Capybara (entry point and implementer) that loops with Owl (code review) and, in Trio mode, Cat (comment and docstring review).
+This repository ships a simplified Copilot Squad for VS Code Copilot custom agents: the agent prompt files under `agents/`, the squad skills under `skills/`, the two PreToolUse hooks (`guard-pwsh-continuation` and `guard-subagent-delegation`) with their companion scripts under `hooks/` and `scripts/`, and the installer `install.ps1` with its test battery `test-install.ps1`. The installed squad runs Capybara (entry point and implementer) that loops with Owl (code review) and, in Trio mode, Cat (comment and docstring review).
 
 `README.md` is the product documentation and the authority on the squad's runtime flow. Keep it in sync with behavior changes.
 
 ## Prerequisites
 
-- Windows PowerShell 5.1 or newer runs `install.ps1`. pwsh 7 runs the test batteries and the guard script.
+- Windows PowerShell 5.1 or newer runs `install.ps1`. pwsh 7 runs the test batteries and the guard scripts.
 - No package manager, external services, or database. The batteries need only pwsh 7 on Windows.
 - VS Code with Copilot custom agents support matters only for running the installed squad, not for developing it.
 
@@ -19,7 +19,7 @@ This repository ships a simplified Copilot Squad for VS Code Copilot custom agen
 The project is pinned to two PowerShell tiers. Check the `#Requires` line before using newer syntax.
 
 - `install.ps1` must stay compatible with Windows PowerShell 5.1 (`#Requires -Version 5.1`). Unavailable there, among others: the ternary operator (7.0), the null-coalescing operators `??` and `??=` (7.0), chain operators as statement separators (`&&` and `||` between PowerShell statements, 7.0), and `ForEach-Object -Parallel` (7.0). Use `if`, explicit `$null` checks, and sequential statements instead.
-- The guard script and both test batteries pin pwsh 7 (`#requires -Version 7`) and may use 7-only syntax.
+- The guard scripts and all test batteries pin pwsh 7 (`#requires -Version 7`) and may use 7-only syntax.
 
 Windows shell rules for generated terminal commands:
 
@@ -110,8 +110,8 @@ Scripts start with `Set-StrictMode -Version 2.0` and `$ErrorActionPreference = '
 github-copilot-squad-simplified/
 ├── agents/                            # agent prompt files: Capybara, CapybaraDuo, Owl, Cat
 ├── skills/                            # squad skills: agents-md, commit-message, pr-description
-├── hooks/guard-pwsh-continuation.json # hook config template, carries a path placeholder
-├── scripts/guard-pwsh-continuation/   # guard companion script and its battery
+├── hooks/                             # hook config templates: guard-pwsh-continuation, guard-subagent-delegation
+├── scripts/                           # hook companion scripts and batteries, one folder per hook
 ├── install.ps1                        # interactive menu or flags, install and uninstall
 ├── test-install.ps1                   # installer test battery
 └── README.md                          # product documentation
@@ -125,13 +125,13 @@ github-copilot-squad-simplified/
 ## Error Handling
 
 - Scripts set `$ErrorActionPreference = 'Stop'`, catch errors at the top level, print them via `Write-Error`, and exit 1. Failures abort the run before misleading the user, and template rewrites resolve during planning so a broken template aborts before any file is written.
-- The guard script inverts the exit-code contract on purpose: the Copilot SDK harness deny-fails on a non-zero hook exit, so the script exits 0 on every path and communicates a deny only through its JSON output.
+- The guard scripts invert the exit-code contract on purpose: the Copilot SDK harness deny-fails on a non-zero hook exit, so each script exits 0 on every path and communicates a deny only through its JSON output.
 - Do not swallow exceptions silently, and do not catch the generic `Exception` where a specific condition is meant. Rethrow with context when a lower layer detects a broken assumption.
 
 ## Observability
 
 - User-facing progress goes through `Write-Host`, with `Write-Warning` for degraded states and `Write-Error` for top-level failures.
-- The guard script's stdout is contract JSON read by the harness. Never write diagnostics to it.
+- Each guard script's stdout is contract JSON read by the harness. Never write diagnostics to it.
 - Never echo secrets, tokens, or personal data into any output.
 
 ## Testing
@@ -140,14 +140,17 @@ github-copilot-squad-simplified/
 
 ### How to Run Tests
 
-Two out-of-process batteries exist, both run from the repo root:
+Three out-of-process batteries exist, all run from the repo root:
 
 ```powershell
 # Installer battery: install.ps1 and uninstall flows against disposable temp roots
 pwsh -NoProfile -File test-install.ps1
 
-# Guard battery: guard-pwsh-continuation.ps1 parse and deny decisions
+# Shell guard battery: guard-pwsh-continuation.ps1 parse and deny decisions
 pwsh -NoProfile -File scripts/guard-pwsh-continuation/test-guard-pwsh-continuation.ps1
+
+# Delegation guard battery: guard-subagent-delegation.ps1 deny and allow decisions
+pwsh -NoProfile -File scripts/guard-subagent-delegation/test-guard-subagent-delegation.ps1
 ```
 
 - Run the whole battery that covers the touched script. Never cherry-pick single cases, because the batteries are cheap and cases share setup.
@@ -191,9 +194,10 @@ Update `README.md` when you add or change installer flags, menu prompts, placeho
 ## Key Concepts
 
 1. **Squad runtime flow.** Capybara implements, runs the Owl code review loop, then the Cat comment/docstring loop (Trio), each with its own 5-iteration cap, and writes `implementation_{n}.md` reports under `.github/temp_reports/{timestamp}_{objective}/`. Owl writes `review_{n}.md`, Cat writes `docstring_review_{n}.md`. See README "How the flow works" and `agents/Capybara.agent.md`.
-2. **Installer plan.** `install.ps1` runs a menu (no arguments) or acts on flags, builds a plan of file operations with optional rewritten content (`RewrittenContent`), and writes only after the plan resolves. Rewrites resolve during planning so a broken template aborts before anything is written. Uninstall maps fixed squad paths, removes only those, and reports name-matching leftovers. See `install.ps1`.
-3. **Placeholder contracts.** The hook JSON's `C:/Users/YOUR-PROFILE` (user level) or `C:/Users/YOUR-PROFILE/.copilot/scripts` (repo level) becomes the real profile or `.github/scripts` path. The agent files' `__OWL_MODEL__` and `__OWL_REASONING_EFFORT__` (both Capybara files) plus `__CAT_MODEL__` and `__CAT_REASONING_EFFORT__` (`Capybara.agent.md` only) become the per-subagent values the installer prompts for, or takes via `-OwlModel`, `-OwlReasoningEffort`, `-CatModel`, and `-CatReasoningEffort`. Every rewrite must leave no placeholder behind, and a template missing its expected placeholder aborts the run.
-4. **Guard hook contract.** The hook fails closed in the harness, so the companion script always exits 0 and denies only via `permissionDecision` JSON. It checks only fresh shell PowerShell commands from the Copilot SDK harness, uses the PowerShell parser's incomplete-input signal to detect `>>` continuation, and lets non-Windows sessions and already-running-process tools pass without parsing. See `scripts/guard-pwsh-continuation/guard-pwsh-continuation.ps1`.
+2. **Installer plan.** `install.ps1` runs a menu (no arguments) or acts on flags, builds a plan of file operations with optional rewritten content (`RewrittenContent`), and writes only after the plan resolves. Rewrites resolve during planning so a broken template aborts before anything is written. The subagent delegation hook travels with the agents component by default, or per `-SubagentGuard Skip` and `Force`, so an agents-only plan also carries its file operations. Uninstall maps fixed squad paths, removes only those, and reports name-matching leftovers. See `install.ps1`.
+3. **Placeholder contracts.** Each hook JSON's `C:/Users/YOUR-PROFILE` (user level) or `C:/Users/YOUR-PROFILE/.copilot/scripts` (repo level) becomes the real profile or `.github/scripts` path. The agent files' `__OWL_MODEL__` and `__OWL_REASONING_EFFORT__` (both Capybara files) plus `__CAT_MODEL__` and `__CAT_REASONING_EFFORT__` (`Capybara.agent.md` only) become the per-subagent values the installer prompts for, or takes via `-OwlModel`, `-OwlReasoningEffort`, `-CatModel`, and `-CatReasoningEffort`. Every rewrite must leave no placeholder behind, and a template missing its expected placeholder aborts the run.
+4. **Shell guard contract.** The hook fails closed in the harness, so the companion script always exits 0 and denies only via `permissionDecision` JSON. It checks only fresh shell PowerShell commands from the Copilot SDK harness, uses the PowerShell parser's incomplete-input signal to detect `>>` continuation, and lets non-Windows sessions and already-running-process tools pass without parsing. See `scripts/guard-pwsh-continuation/guard-pwsh-continuation.ps1`.
+5. **Subagent delegation guard contract.** The same exit-code contract applies, and the script denies a subagent tool call (reported as `Agent`, with `Task` and `task` fallbacks) whose `agent_type` names a squad reviewer (Owl, Cat, case-insensitive) when `model` or `reasoning_effort` is missing. Enforcement is presence only, non-reviewer and unclassifiable calls pass through, the deny reason instructs a retry with both fields or surfacing the limitation to the user, and the hook JSON budgets a 60-second timeout because a harness-side timeout fails open. See `scripts/guard-subagent-delegation/guard-subagent-delegation.ps1`.
 
 ## Rule of Thumb
 

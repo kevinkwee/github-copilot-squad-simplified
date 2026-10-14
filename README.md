@@ -95,8 +95,9 @@ For scripted use, flags replace the menu:
 pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Action install -Components all -Level user -OwlModel 'GLM-5.3' -OwlReasoningEffort high -CatModel 'flash' -CatReasoningEffort low
 ```
 
-- `-Components` picks the parts: one or more of `agents`, `skills`, and `hooks` (comma separated, for example `-Components agents,skills`), or `all` for everything, which cannot be combined with named components. The hooks component installs the hook JSON and its companion script together and rewrites the JSON's placeholder script path for the chosen level, so no manual path edit remains. The agents component rewrites the per-subagent model and effort placeholders inside the installed `Capybara` and `Capybara Duo` files the same way.
+- `-Components` picks the parts: one or more of `agents`, `skills`, and `hooks` (comma separated, for example `-Components agents,skills`), or `all` for everything, which cannot be combined with named components. Each hook's JSON and its companion script install together, and each JSON's placeholder script path is rewritten for the chosen level, so no manual path edit remains. An agents install carries the subagent delegation hook too, per `-SubagentGuard` below. The agents component rewrites the per-subagent model and effort placeholders inside the installed `Capybara` and `Capybara Duo` files the same way.
 - `-OwlModel <id or name part>`, `-OwlReasoningEffort <effort>`, `-CatModel <id or name part>`, and `-CatReasoningEffort <effort>` supply the per-subagent values the installer writes into those placeholders. Scripted installs that include the `agents` component on the install action require all four, and they fail fast for any other run. Interactive runs are asked for the same four values (see the Subagent model note).
+- `-SubagentGuard Auto|Skip|Force` (default `Auto`) controls the subagent delegation guard hook, which denies a reviewer subagent call that omits `model` or `reasoning_effort` (see the Hooks section). `Auto` installs it whenever the agents component is installed, `Skip` leaves it out and fails fast on any install that does not include the agents component, and `Force` installs it into any install that includes the agents or hooks component, for example a hooks-only install for a hand-maintained agents folder (runs selecting neither fail fast). Only install runs accept a non-`Auto` value.
 - `-Level user` (default) writes under `%USERPROFILE%\.copilot\`. `-Level repo` writes under the project's `.github\` folder and requires `-ProjectRoot <path>`.
 - `-UserRoot <path>` overrides the user-level target root for one run, mainly for previews into a scratch folder; repo-level runs do not accept it.
 - `-Action uninstall` uses the same component and level choices to remove the squad's files. Add `-WhatIf` to either action for a dry run that only prints the plan.
@@ -109,7 +110,7 @@ Copy the agent profiles into:
 
 - `.github/agents/*.agent.md`
 
-This makes them available for that repository/workspace. In this repo the profiles live in [`agents/`](agents/), so copying (or linking) that folder's files into your project's `.github/agents/` is enough once you replace the Owl and Cat placeholders in the two Capybara files (see the Subagent model note); the `skills/` folder ships `agents-md`, `commit-message`, and `pr-description` the same way; and the `hooks/` and `scripts/` folders ship the `guard-pwsh-continuation` hook, whose install steps (including the required script-path edit in the JSON) are in the Hooks section.
+This makes them available for that repository/workspace. In this repo the profiles live in [`agents/`](agents/), so copying (or linking) that folder's files into your project's `.github/agents/` is enough once you replace the Owl and Cat placeholders in the two Capybara files (see the Subagent model note); the `skills/` folder ships `agents-md`, `commit-message`, and `pr-description` the same way; and the `hooks/` and `scripts/` folders ship the two squad hooks (`guard-pwsh-continuation` and `guard-subagent-delegation`), whose install steps (including the required script-path edits in the JSONs) are in the Hooks section.
 
 The scripted install performs the same copies and fills the placeholders by itself: run it with `-Level repo -ProjectRoot <the project>` (see the Scripted install section).
 
@@ -130,6 +131,8 @@ Each reviewer has its own pair, shipped as placeholders: Owl gets `__OWL_MODEL__
 The interactive menu asks for the four values, and scripted installs that include the `agents` component take `-OwlModel`, `-OwlReasoningEffort`, `-CatModel`, and `-CatReasoningEffort` instead. If you copy files manually without the installer, replace the placeholders yourself right after copying. An installed file with a placeholder left in place leaves the reviewers on an unfilled model name, so their calls do not resolve until you fix it.
 
 Reasoning effort values differ per harness. `low`, `medium`, and `high` are the common choices.
+
+Enforcement of the note is also installable. With the default `-SubagentGuard Auto`, the installer also deploys the subagent delegation guard hook, and a subagent call that starts Owl or Cat without both `model` and `reasoning_effort` is then denied by the hook with a reason telling the caller to retry with both fields set, or to surface the limitation when its tool cannot set them. Presence is enforced, not the value, so a reviewer run on a model the user names at run time instead of the configured one still passes, and calls that name other agents are untouched. A harness without hook support simply falls back to the tool's defaults, exactly as the delegation rule says. `Skip` opts out of an agents install and `Force` deploys the hook into a hooks-only install (see the Hooks section).
 
 ### Use it
 
@@ -318,25 +321,29 @@ The repo ships hooks the same way as agents and skills, with configs and scripts
 
 ```text
 hooks/
-└── guard-pwsh-continuation.json            # PreToolUse hook config (user-level form)
+├── guard-pwsh-continuation.json            # PreToolUse hook config (user-level form)
+└── guard-subagent-delegation.json          # PreToolUse hook config (user-level form)
 
 scripts/
-└── guard-pwsh-continuation/
-    ├── guard-pwsh-continuation.ps1         # the guard
-    └── test-guard-pwsh-continuation.ps1   # out-of-process test battery
+├── guard-pwsh-continuation/
+│   ├── guard-pwsh-continuation.ps1         # the shell guard
+│   └── test-guard-pwsh-continuation.ps1    # out-of-process test battery
+└── guard-subagent-delegation/
+    ├── guard-subagent-delegation.ps1       # the delegation guard
+    └── test-guard-subagent-delegation.ps1  # out-of-process test battery
 ```
 
 ### User-level install (recommended)
 
 One install covers every Copilot SDK session in every workspace: VS Code Agents window and Chat view Copilot sessions on the Agent Host, and Copilot CLI, which share the same SDK hook implementation.
 
-1. Copy `scripts/guard-pwsh-continuation/` into `%USERPROFILE%\.copilot\scripts\`.
-2. Copy `hooks/guard-pwsh-continuation.json` into `%USERPROFILE%\.copilot\hooks\`.
-3. Edit the copied JSON so the `pwsh -File` argument is the absolute path to the script: replace the `C:/Users/YOUR-PROFILE` segment with your Windows profile folder (for example, the folder shown by `%USERPROFILE%`).
+1. Copy each `scripts/<hook-name>/` folder into `%USERPROFILE%\.copilot\scripts\`.
+2. Copy each `hooks/<hook-name>.json` into `%USERPROFILE%\.copilot\hooks\`.
+3. Edit the copied JSONs so the `pwsh -File` argument is the absolute path to the script: replace the `C:/Users/YOUR-PROFILE` segment with your Windows profile folder (for example, the folder shown by `%USERPROFILE%`).
 
-The install script with `-Components hooks` performs these three steps (including the placeholder edit) automatically.
+The install script with `-Components hooks` performs these three steps for both hooks (including the placeholder edits) automatically. A hooks-only install carries only the shell guard unless `-SubagentGuard Force` is passed, and an agents install carries the delegation guard by default.
 
-Step 3 is required before the guard works, and the hook fails closed until that edit is applied: the shipped `-File` path is a placeholder, `pwsh` cannot launch a missing script file and exits non-zero, and the Copilot SDK harness treats a non-zero hook exit as a deny for every matched shell command.
+Step 3 is required before the guards work, and the hooks fail closed until that edit is applied: the shipped `-File` path is a placeholder, `pwsh` cannot launch a missing script file and exits non-zero, and the Copilot SDK harness treats a non-zero hook exit as a deny for every matched tool call.
 
 The absolute path is required because the harness derives the hook command's working directory from the session, not from the JSON file's location: the repository root when the session's working directory sits inside a git repository, the session's working directory otherwise, and the system temp dir when neither is usable. A repo-relative `-File` path would resolve against whichever project each session runs over, and deny shell commands in every project that has not deployed the script at that path.
 
@@ -365,7 +372,7 @@ Copy `scripts/guard-pwsh-continuation/` into `.github/scripts/` of the project, 
 
 The relative path is safe because the hook command's working directory is the project's repository root, so `.github/scripts/...` resolves for every session over that repository. This is also the install level that stays reachable inside sandboxed Copilot CLI sessions and the only one cloud agent jobs read (see the operational notes).
 
-The install script creates this JSON from the shipped template with `-Components hooks -Level repo -ProjectRoot <the project>`.
+The install script creates the chosen hooks' JSONs from the shipped templates with `-Components hooks -Level repo -ProjectRoot <the project>` (pass `-SubagentGuard Force` on a hooks-only repo-level run that should also carry the delegation guard). The delegation guard's repo-level JSON has the same shape, with its own folder in the `-File` path, `"matcher": "Agent"`, and `"timeout": 60`.
 
 ### guard-pwsh-continuation
 
@@ -373,7 +380,7 @@ Denies a shell command that would leave the terminal at the PowerShell continuat
 
 The hook is adapted to the **Copilot SDK harness only**:
 
-- **Tool naming**: configured with the PascalCase `PreToolUse` event, the harness delivers the VS Code compatible payload and reports the Claude tool name `Bash` for its `powershell`/`bash` runtime tools, so the guard checks `Bash` (with the runtime name `powershell` as a defensive fallback) and ignores every other tool. The matcher in the JSON (`"Bash"`) keeps the harness from even invoking the script for other tools.
+- **Tool naming**: configured with the PascalCase `PreToolUse` event, the harness delivers the VS Code compatible payload and reports the Claude tool name `Bash` for its `powershell`/`bash` runtime tools, so the guard checks `Bash` (with the runtime name `powershell` as a defensive fallback) and ignores every other tool. The matcher in the JSON (`"Bash"`) mirrors that filter at the config layer, but the harness still invokes entries whose matcher does not match the reported tool name, so the script's own tool-name filter is the real gate.
 - **Decision output**: the deny uses the flat `permissionDecision` + `permissionDecisionReason` JSON documented for the Copilot SDK harness. Harnesses that expect the nested `hookSpecificOutput` shape (the VS Code Local harness, Claude Code) ignore it, so the hook is a no-op there even if they load the same file.
 - **Non-Windows no-op**: the `bash` command field in the JSON is an explicit `exit 0`. Linux, macOS, and Copilot cloud agent sessions run bash commands, which a PowerShell parse cannot judge, and the cloud agent sandbox honors only the `bash` field anyway. The script also allows everything when it is not running on Windows, as a second layer of the same protection.
 
@@ -385,12 +392,28 @@ Operational notes:
 - **Keep one copy**: all hook sources are combined and every entry runs. If the same guard is installed at two levels (a user-level copy plus a project's `.github/hooks/` copy), each matched command is parsed twice, so drop one of the two.
 - **Uninstall script**: `install.ps1 -Action uninstall` with the same component and level choices removes exactly the squad's files at that level (the hooks choice includes the companion script) and leaves every other file alone. Any remaining item that matches a squad name, such as a `.disabled` rename, is listed for manual cleanup instead of deleted.
 
-The guard is the one squad component that names tools. A `PreToolUse` filter must match concrete tool names, so it cannot be fully harness-agnostic like the agents; instead it scopes itself to the Copilot SDK harness names and stays a no-op everywhere else.
+The hooks are the squad components that name tools. A `PreToolUse` filter must match concrete tool names, so it cannot be fully harness-agnostic like the agents. They instead scope themselves to the Copilot SDK harness names and stay no-ops everywhere else.
 
 Run the test battery from the repo root (or from a deployed `scripts/guard-pwsh-continuation/` folder at either install level):
 
 ```powershell
 pwsh -NoProfile -File scripts/guard-pwsh-continuation/test-guard-pwsh-continuation.ps1
+```
+
+### guard-subagent-delegation
+
+Denies a subagent tool call that starts a squad reviewer (Owl, Cat) without the fields the delegation rule requires on every reviewer call: `model` and `reasoning_effort`. Instructions alone do not enforce those fields, and an omitted model silently runs the reviewer on a fallback model, so omission has to fail loudly instead. The deny reason returned to the caller names the agent and the missing fields and tells it to retry with both fields set, or surface the limitation to the user when its tool cannot set them.
+
+- **Presence only**: any non-empty value satisfies the check, so a reviewer run on a model the user names at run time instead of the configured one still passes. The reason references the delegation rule rather than echoing configured values, and values are never compared.
+- **Scope**: only subagent tool calls, which the harness reports as `Agent` (with `Task` and the runtime name `task` as fallbacks), whose `agent_type` names Owl or Cat, case-insensitively. Calls that name the entry point agents, the built-in agents, or nothing identifiable (`agent_type` missing) pass through. Enforcement is also session-wide, so the guard catches Owl calls that `Capybara Duo` makes from inside its own session.
+- **Fail open on defects**: the script exits 0 on every path, so a script runtime error allows the call. Its work is a stdin read and one JSON parse, well under a second including startup. The hook JSON budgets 60 seconds instead of the shell guard's 10, because a harness-side timeout also fails open and a timeout here would silently skip enforcement. The larger budget makes that a pathological event instead of a bypass.
+- **Non-Windows and cloud jobs**: the `bash` field in the JSON stays `exit 0`, so bash sessions and cloud agent jobs, which honor only the `bash` field, do not enforce there.
+- **Install coupling**: the hook travels with the `agents` component by default (`-SubagentGuard Auto`), can be left out of an agents install (`Skip`), or forced onto any install that includes the agents or hooks component (`Force`), for example a hooks-only install for a hand-maintained agents folder. Uninstalling agents or hooks removes it, and its files follow the same leftover reporting as the rest of the squad.
+
+Run its battery the same way:
+
+```powershell
+pwsh -NoProfile -File scripts/guard-subagent-delegation/test-guard-subagent-delegation.ps1
 ```
 
 ## Working with the built-in workflow skills

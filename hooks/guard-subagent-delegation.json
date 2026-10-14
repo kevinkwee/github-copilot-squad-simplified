@@ -1,0 +1,14 @@
+{
+    "version": 1,
+    "hooks": {
+        "PreToolUse": [
+            {
+                "type": "command",
+                "matcher": "Agent",
+                "powershell": "pwsh -NoProfile -ExecutionPolicy Bypass -File C:/Users/YOUR-PROFILE/.copilot/scripts/guard-subagent-delegation/guard-subagent-delegation.ps1",
+                "bash": "exit 0",
+                "timeout": 60
+            }
+        ]
+    }
+}
