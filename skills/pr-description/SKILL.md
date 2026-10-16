@@ -31,7 +31,16 @@ A session may provide built-in PR workflow skills (the Agents window on the Copi
    - `git diff <merge-base>...HEAD --stat` for the shape of the change
    - `git diff <merge-base>...HEAD` for the substance when the commits alone do not explain the change
    - the repo's recent PR/commit message style if useful
-3. **Title**: a single line in Conventional Commits style, describing the PR as a whole (not a copy of one commit's message). Same rules as commit messages: one of the standard types, optional scope, imperative mood, no trailing period, `!` before the colon for breaking changes, no sentence wrapping.
+3. **Title**: a single line in Conventional Commits style, describing the PR as a whole (not a copy of one commit's message). Same rules as commit messages: one of the standard types, optional scope, imperative mood, no trailing period, `!` before the colon for breaking changes, no sentence wrapping. A title is a single line with no body to absorb the tail, so a wrap leaves the sentence broken in two. BAD and GOOD:
+
+   ```text
+   BAD:
+   feat: move the guard hook install to the user level with an
+   absolute script path
+
+   GOOD:
+   feat: move the guard hook install to the user level with an absolute script path
+   ```
 4. **Description**: use the PR template when the user provides one, or the default format below when the repo has none.
 
 ## Template handling
@@ -80,7 +89,7 @@ Delete this section if unnecessary.
 -->
 ```
 
-Fill the sections: keep only the applicable types, list the key changes reviewers should care about, and delete Notes and Testing when they add nothing. Real content over template comments; when the user's argument carries context (issue number, intent), fold it in.
+Fill the sections: keep only the applicable types, list the key changes reviewers should care about, and delete Notes and Testing when they add nothing. Real content over template comments. When the user's argument carries context (issue number, intent), fold it in. Keep every bullet in the description on a single line and never hard-wrap it, however long the line gets.
 
 ## Output
 

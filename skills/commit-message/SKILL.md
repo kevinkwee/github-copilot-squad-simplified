@@ -43,12 +43,31 @@ A session may provide a built-in commit workflow skill (the Agents window on the
 - `<body>`: optional, include only if really necessary. Provide additional context or details about the change. Use bullet points for multiple items, in the imperative mood, starting with a capital letter. If the description needs a longer form or explanation, write it as paragraphs before the bullet points. Do not treat paragraphs as a default.
 - `<footer>`: optional. For breaking changes, include `BREAKING CHANGE:` followed by a description. For referencing issues, include `Closes #<issue_number>` for each issue closed by the commit.
 - Breaking changes: put `!` right before the `:` in the header (`feat!:` or `fix(scope)!:`; `fix!(scope):` is wrong).
-- Do not wrap a sentence into multiple lines, keep it as a single line.
+- Do not wrap a sentence into multiple lines, keep it as a single line, however long it gets. Never break a line to respect the classic 50 or 72 character commit limits. Tools read a subject out of the first paragraph, so a wrapped tail lands in the body or gets folded back with a space. BAD and GOOD for the subject:
+
+  ```text
+  BAD:
+  feat(auth): refresh the session token on a 401 from
+  the userinfo endpoint
+
+  GOOD:
+  feat(auth): refresh the session token on a 401 from the userinfo endpoint
+  ```
+- Body bullets obey the same single-line rule. BAD and GOOD:
+
+  ```text
+  BAD:
+  - Grow the installer battery with guard placement, flag, menu, matcher, and uninstall
+  cases, and document both hooks in README and AGENTS.md
+
+  GOOD:
+  - Grow the installer battery with guard placement, flag, menu, matcher, and uninstall cases, and document both hooks in README and AGENTS.md
+  ```
 - Do not mention any unstaged changes.
 
 ## Output
 
-Return the message in a single fenced block so it can be copied verbatim. Do not wrap a sentence into multiple lines, keep it as a single line.
+Return the message in a single fenced block so it can be copied verbatim. Do not wrap a sentence into multiple lines, keep it as a single line. The BAD and GOOD examples in Message format apply to that block too.
 
 ## Ask how to proceed
 
