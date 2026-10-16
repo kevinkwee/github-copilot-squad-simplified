@@ -110,7 +110,7 @@ Copy the agent profiles into:
 
 - `.github/agents/*.agent.md`
 
-This makes them available for that repository/workspace. In this repo the profiles live in [`agents/`](agents/), so copying (or linking) that folder's files into your project's `.github/agents/` is enough once you replace the Owl and Cat placeholders in the two Capybara files (see the Subagent model note); the `skills/` folder ships `agents-md`, `commit-message`, `gh-multi-account`, and `pr-description` the same way; and the `hooks/` and `scripts/` folders ship the two squad hooks (`guard-pwsh-continuation` and `guard-subagent-delegation`), whose install steps (including the required script-path edits in the JSONs) are in the Hooks section.
+This makes them available for that repository/workspace. In this repo the profiles live in [`agents/`](agents/), so copying (or linking) that folder's files into your project's `.github/agents/` is enough once you replace the Owl and Cat placeholders in the two Capybara files (see the Subagent model note); the `skills/` folder ships `agents-md`, `commit-message`, `gh-multi-account`, `merge-strategy`, and `pr-description` the same way; and the `hooks/` and `scripts/` folders ship the two squad hooks (`guard-pwsh-continuation` and `guard-subagent-delegation`), whose install steps (including the required script-path edits in the JSONs) are in the Hooks section.
 
 The scripted install performs the same copies and fills the placeholders by itself: run it with `-Level repo -ProjectRoot <the project>` (see the Scripted install section).
 
@@ -327,6 +327,23 @@ skills/
 - **Verified behavior notes** (gh 2.86.0): the `--user` lookup reads the stored credential even while `GH_TOKEN` is already set, ssh remotes bypass the gh credential helper, and `gh auth status` marks the export active and the keyring accounts inactive while it is set.
 - **Deployment**: same model as the other skills; discovered at `.github/skills/gh-multi-account/`.
 
+## Merge strategy skill
+
+A fifth shipped skill decides the merge strategy for every merge:
+
+```text
+skills/
+└── merge-strategy/
+    └── SKILL.md              # merge strategy procedure
+```
+
+- **`/merge-strategy`**: resolves what merges (a pull request or a local branch into its base), chooses the strategy, and performs the merge when the session provides no built-in merge skill.
+- **Strategy precedence**: the user-named strategy wins, then a strategy the target repository clearly documents or enforces (CONTRIBUTING.md rules, branch protection), then the squad default of a merge commit (`gh pr merge --merge`, `git merge --no-ff` locally). The skill never infers squash or rebase from the shape of history, and the absence of merge commits is not a squash or rebase signal.
+- **Strategy authority**: load it before any merge, including one a built-in merge workflow skill performs. It owns the strategy choice.
+- **Conflicts route through the workflow**: when a merge hits conflicts, the direct merge path stops and the conflict resolution runs the squad workflow (implement, then the review loop) before the merge completes with the chosen strategy.
+- **Sync exclusion**: branch sync flows that only bring a branch up to date with its upstream (for example the session's sync-upstream skill or `git pull --rebase`) are updates, not merge decisions, so the skill does not apply to them.
+- **Deployment**: same model as the other skills; discovered at `.github/skills/merge-strategy/`.
+
 ## Hooks
 
 The repo ships hooks the same way as agents and skills, with configs and scripts separated so the `hooks/` folder stays a flat list of JSON files as the collection grows:
@@ -433,13 +450,14 @@ pwsh -NoProfile -File scripts/guard-subagent-delegation/test-guard-subagent-dele
 
 ## Working with the built-in workflow skills
 
-The VS Code Agents window (built on the Copilot SDK harness) ships its own workflow skills for commits and pull requests: `commit`, `create-pr`, `create-draft-pr`, and `update-pr`. The squad's `commit-message` and `pr-description` skills are built to compose with them instead of competing:
+The VS Code Agents window (built on the Copilot SDK harness) ships its own workflow skills for commits, pull requests, and merges: `commit`, `create-pr`, `create-draft-pr`, `update-pr`, and `merge`. The squad's `commit-message`, `pr-description`, and `merge-strategy` skills are built to compose with them instead of competing:
 
-- **Division of labor**: the built-in skills own the action, meaning the commit itself, the branch push, PR creation, draft mode, and session bookkeeping (the linked PR that later update, merge, and fix-ci workflows use). The squad skills own the content and style, meaning the exact commit message, PR title, and description.
-- **Routing**: the squad skills' descriptions tell the agent to load them before any commit or PR creation, including one a built-in skill performs, because they own the style rules. On a plain "commit my changes" request, the built-in skill acts while the squad skill shapes the message. On "write me a commit message" (or `/commit-message`), the squad skill drafts and presents.
+- **Division of labor**: the built-in skills own the action, meaning the commit itself, the branch push, PR creation, draft mode, the merge command, and session bookkeeping (the linked PR that later update, merge, and fix-ci workflows use). The squad skills own the content, style, and decisions, meaning the exact commit message, PR title, and description, and the merge strategy.
+- **Routing**: the squad skills' descriptions tell the agent to load them before any commit, PR creation, or merge, including one a built-in skill performs, because they own the rules. On a plain "commit my changes" request, the built-in skill acts while the squad skill shapes the message. On a plain "merge it" request, the built-in merge skill acts while `merge-strategy` picks between merge commit, squash, and rebase. On "write me a commit message" (or `/commit-message`), the squad skill drafts and presents.
+- **Merge conflicts**: a merge that hits conflicts stops the direct path. The resolution is implementation work and runs the workflow's review steps before the merge completes with the chosen strategy.
 - **Harness-agnostic fallback**: on harnesses without built-in skills (Copilot CLI, Codex via Agent Host, a plain terminal), the squad skills perform the action themselves with git and `gh`, unchanged.
 
-| Request | Who acts | Content style from |
+| Request | Who acts | Squad rules from |
 | --- | --- | --- |
 | "commit my changes", "save my work" | built-in commit skill | `commit-message` |
 | "write me a commit message" | `commit-message` (text only) | `commit-message` |
@@ -447,6 +465,8 @@ The VS Code Agents window (built on the Copilot SDK harness) ships its own workf
 | "open a PR", "open a draft PR" | built-in `create-pr` / `create-draft-pr` | `pr-description` |
 | "write the PR description" | `pr-description` (text only) | `pr-description` |
 | `/pr-description`, then "create the PR as-is" | built-in PR skill when present, else `gh pr create` | `pr-description` |
+| "merge it", "merge this PR" | built-in `merge` skill | `merge-strategy` (default: merge commit) |
+| merge hits conflicts | the resolution runs the workflow, then the merge completes | `merge-strategy` |
 | Harness without built-in skills | the squad skills' own git / `gh` steps | the squad skills |
 
 Skill discovery is best effort. VS Code does not guarantee a skill invocation for every relevant prompt, so treat the description routing as strong steering rather than a hard override.
