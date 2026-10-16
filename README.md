@@ -110,7 +110,7 @@ Copy the agent profiles into:
 
 - `.github/agents/*.agent.md`
 
-This makes them available for that repository/workspace. In this repo the profiles live in [`agents/`](agents/), so copying (or linking) that folder's files into your project's `.github/agents/` is enough once you replace the Owl and Cat placeholders in the two Capybara files (see the Subagent model note); the `skills/` folder ships `agents-md`, `commit-message`, and `pr-description` the same way; and the `hooks/` and `scripts/` folders ship the two squad hooks (`guard-pwsh-continuation` and `guard-subagent-delegation`), whose install steps (including the required script-path edits in the JSONs) are in the Hooks section.
+This makes them available for that repository/workspace. In this repo the profiles live in [`agents/`](agents/), so copying (or linking) that folder's files into your project's `.github/agents/` is enough once you replace the Owl and Cat placeholders in the two Capybara files (see the Subagent model note); the `skills/` folder ships `agents-md`, `commit-message`, `gh-multi-account`, and `pr-description` the same way; and the `hooks/` and `scripts/` folders ship the two squad hooks (`guard-pwsh-continuation` and `guard-subagent-delegation`), whose install steps (including the required script-path edits in the JSONs) are in the Hooks section.
 
 The scripted install performs the same copies and fills the placeholders by itself: run it with `-Level repo -ProjectRoot <the project>` (see the Scripted install section).
 
@@ -311,6 +311,21 @@ skills/
 - **Style authority**: load it before any PR creation or update, including by a built-in PR workflow skill. It owns the title and description style.
 - **After presenting** the title and description it asks how to proceed: create the PR as-is (through the session's built-in PR creation skills when present, otherwise `gh pr create`, confirming the target branch first), create it as a draft when the user has not specified, or text only. Freeform input revises it.
 - **Deployment**: same model as the other skills; discovered at `.github/skills/pr-description/`.
+
+## Multi-account gh skill
+
+A fourth shipped skill runs gh and gh-authenticated git commands as a specific logged-in GitHub account:
+
+```text
+skills/
+└── gh-multi-account/
+    └── SKILL.md              # scoped GH_TOKEN export procedure
+```
+
+- **`/gh-multi-account`**: exports the target account's token (`gh auth token --user <account>`) into `GH_TOKEN` for a group of commands and clears it afterward, so gh calls and https git authentication act as that account without touching the active account.
+- **No account switching**: `gh auth switch` permanently changes the active account, so the skill replaces it with the scoped export and cleanup pattern.
+- **Verified behavior notes** (gh 2.86.0): the `--user` lookup reads the stored credential even while `GH_TOKEN` is already set, ssh remotes bypass the gh credential helper, and `gh auth status` marks the export active and the keyring accounts inactive while it is set.
+- **Deployment**: same model as the other skills; discovered at `.github/skills/gh-multi-account/`.
 
 ## Hooks
 

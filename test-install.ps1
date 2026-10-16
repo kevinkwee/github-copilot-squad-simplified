@@ -38,6 +38,7 @@ $RelativeLayout = @(
     'skills/agents-md/SKILL.md',
     'skills/agents-md/assets/AGENTS-template.md',
     'skills/commit-message/SKILL.md',
+    'skills/gh-multi-account/SKILL.md',
     'skills/pr-description/SKILL.md',
     'hooks/guard-pwsh-continuation.json',
     'scripts/guard-pwsh-continuation/guard-pwsh-continuation.ps1',
@@ -46,7 +47,7 @@ $RelativeLayout = @(
     'scripts/guard-subagent-delegation/guard-subagent-delegation.ps1',
     'scripts/guard-subagent-delegation/test-guard-subagent-delegation.ps1'
 )
-$SubagentGuardLayout = $RelativeLayout[11..13]
+$SubagentGuardLayout = $RelativeLayout[12..14]
 
 function New-TempRoot {
     $path = Join-Path ([System.IO.Path]::GetTempPath()) ('capy-install-' + [System.Guid]::NewGuid().ToString('N'))
@@ -155,7 +156,7 @@ try {
     $result = Invoke-InstallerRun -Arguments (@('-Action', 'install', '-Components', 'all', '-Level', 'user', '-UserRoot', $userRoot) + $SubagentFlags)
     Add-Result -Condition ($result.ExitCode -eq 0) -CaseName 'install all (user level) exits 0' -FailMessage "exit code $($result.ExitCode)"
     Add-Result -Condition (Test-AllFilesExist -Root $userRoot -RelativePaths $RelativeLayout) -CaseName 'install all (user level) file set' -FailMessage 'expected files are missing'
-    Add-Result -Condition ($result.Output.Contains('Done: 14 copied, 0 overwritten.')) -CaseName 'install all (user level) summary' -FailMessage $result.Output
+    Add-Result -Condition ($result.Output.Contains('Done: 15 copied, 0 overwritten.')) -CaseName 'install all (user level) summary' -FailMessage $result.Output
 
     # Case 2: the installed hook JSON has the real profile path and no placeholder.
     $installedJsonPath = Join-Path $userRoot 'hooks/guard-pwsh-continuation.json'
@@ -205,14 +206,15 @@ try {
     $skillsRoot = New-TempRoot
     $result = Invoke-InstallerRun -Arguments @('-Action', 'install', '-Components', 'skills', '-Level', 'user', '-UserRoot', $skillsRoot)
     Add-Result -Condition ($result.ExitCode -eq 0) -CaseName 'install skills only exits 0' -FailMessage "exit code $($result.ExitCode)"
-    Add-Result -Condition (Test-AllFilesExist -Root $skillsRoot -RelativePaths $RelativeLayout[4..7]) -CaseName 'install skills only file set incl. assets' -FailMessage 'skill files are missing'
+    Add-Result -Condition (Test-AllFilesExist -Root $skillsRoot -RelativePaths $RelativeLayout[4..8]) -CaseName 'install skills only file set incl. assets' -FailMessage 'skill files are missing'
+    Add-Result -Condition (Test-Path -LiteralPath (Join-Path $skillsRoot 'skills/gh-multi-account/SKILL.md')) -CaseName 'install skills only includes gh-multi-account' -FailMessage 'gh-multi-account skill file is missing'
     Add-Result -Condition (-not (Test-Path -LiteralPath (Join-Path $skillsRoot 'agents/Capybara.agent.md'))) -CaseName 'install skills only skips agents' -FailMessage 'agent was installed'
 
     # Case 5: hooks only.
     $hooksRoot = New-TempRoot
     $result = Invoke-InstallerRun -Arguments @('-Action', 'install', '-Components', 'hooks', '-Level', 'user', '-UserRoot', $hooksRoot)
     Add-Result -Condition ($result.ExitCode -eq 0) -CaseName 'install hooks only exits 0' -FailMessage "exit code $($result.ExitCode)"
-    Add-Result -Condition (Test-AllFilesExist -Root $hooksRoot -RelativePaths $RelativeLayout[8..10]) -CaseName 'install hooks only file set' -FailMessage 'hook files are missing'
+    Add-Result -Condition (Test-AllFilesExist -Root $hooksRoot -RelativePaths $RelativeLayout[9..11]) -CaseName 'install hooks only file set' -FailMessage 'hook files are missing'
     Add-Result -Condition (-not (Test-Path -LiteralPath (Join-Path $hooksRoot 'agents/Capybara.agent.md'))) -CaseName 'install hooks only skips agents' -FailMessage 'agent was installed'
 
     # Case 6: a name conflict is overwritten by default.
@@ -223,11 +225,11 @@ try {
     $result = Invoke-InstallerRun -Arguments (@('-Action', 'install', '-Components', 'all', '-Level', 'user', '-UserRoot', $overwriteRoot) + $SubagentFlags)
     Add-Result -Condition ($result.ExitCode -eq 0) -CaseName 'conflicting install exits 0' -FailMessage "exit code $($result.ExitCode)"
     Add-Result -Condition (((Get-Content -LiteralPath $sentinelPath -Raw).TrimEnd()) -ne 'SENTINEL-OLD-CONTENT') -CaseName 'conflicting install overwrites the file' -FailMessage 'sentinel content survived'
-    Add-Result -Condition ($result.Output.Contains('Done: 13 copied, 1 overwritten.')) -CaseName 'conflicting install reports overwrite' -FailMessage $result.Output
+    Add-Result -Condition ($result.Output.Contains('Done: 14 copied, 1 overwritten.')) -CaseName 'conflicting install reports overwrite' -FailMessage $result.Output
 
     # Case 7: re-running the install is idempotent.
     $result = Invoke-InstallerRun -Arguments (@('-Action', 'install', '-Components', 'all', '-Level', 'user', '-UserRoot', $overwriteRoot) + $SubagentFlags)
-    Add-Result -Condition ($result.ExitCode -eq 0 -and $result.Output.Contains('Done: 0 copied, 14 overwritten.')) -CaseName 're-run reports 14 overwritten' -FailMessage $result.Output
+    Add-Result -Condition ($result.ExitCode -eq 0 -and $result.Output.Contains('Done: 0 copied, 15 overwritten.')) -CaseName 're-run reports 15 overwritten' -FailMessage $result.Output
 
     # Case 8: repo-level install into an existing project folder.
     $repoProject = New-TempRoot
@@ -258,7 +260,7 @@ try {
     $unrelatedAgent = Join-Path $uninstallRoot 'agents/MyOwn.agent.md'
     Set-Content -LiteralPath $unrelatedAgent -Value 'KEEP ME' -NoNewline
     $result = Invoke-InstallerRun -Arguments @('-Action', 'uninstall', '-Components', 'all', '-Level', 'user', '-UserRoot', $uninstallRoot)
-    Add-Result -Condition ($result.ExitCode -eq 0 -and $result.Output.Contains('Done: 14 removed, 0 absent, 0 leftover(s) reported.')) -CaseName 'uninstall all summary' -FailMessage $result.Output
+    Add-Result -Condition ($result.ExitCode -eq 0 -and $result.Output.Contains('Done: 15 removed, 0 absent, 0 leftover(s) reported.')) -CaseName 'uninstall all summary' -FailMessage $result.Output
     Add-Result -Condition (Test-Path -LiteralPath $unrelatedAgent -PathType Leaf) -CaseName 'uninstall keeps unrelated files' -FailMessage 'unrelated agent was removed'
     Add-Result -Condition (-not (Test-Path -LiteralPath (Join-Path $uninstallRoot 'agents/Capybara.agent.md'))) -CaseName 'uninstall removes squad agents' -FailMessage 'squad agent survived'
     Add-Result -Condition (-not (Test-Path -LiteralPath (Join-Path $uninstallRoot 'skills/agents-md'))) -CaseName 'uninstall prunes empty squad folders' -FailMessage 'skill folder survived'
@@ -316,7 +318,7 @@ try {
         $unrelated51 = Join-Path $ps51Root 'agents/MyOwn51.agent.md'
         Set-Content -LiteralPath $unrelated51 -Value 'KEEP ME' -NoNewline
         $result = Invoke-InstallerRun -Runtime windows-powershell -Arguments @('-Action', 'uninstall', '-Components', 'all', '-Level', 'user', '-UserRoot', $ps51Root)
-        Add-Result -Condition ($result.ExitCode -eq 0 -and $result.Output.Contains('Done: 14 removed, 0 absent, 0 leftover(s) reported.')) -CaseName 'uninstaller under Windows PowerShell 5.1 removes squad files' -FailMessage $result.Output
+        Add-Result -Condition ($result.ExitCode -eq 0 -and $result.Output.Contains('Done: 15 removed, 0 absent, 0 leftover(s) reported.')) -CaseName 'uninstaller under Windows PowerShell 5.1 removes squad files' -FailMessage $result.Output
         Add-Result -Condition (Test-Path -LiteralPath $unrelated51 -PathType Leaf) -CaseName 'uninstaller under Windows PowerShell 5.1 keeps unrelated files' -FailMessage 'unrelated agent was removed'
     }
     else {
@@ -379,8 +381,8 @@ try {
     # separate values fail fast at the host.
     $multiRootSeparate = New-TempRoot
     $result = Invoke-InstallerRun -Arguments (@('-Action', 'install', '-Components', 'agents,skills', '-Level', 'user', '-UserRoot', $multiRootSeparate) + $SubagentFlags)
-    Add-Result -Condition ($result.ExitCode -eq 0 -and $result.Output.Contains('Components: agents, skills') -and $result.Output.Contains('Done: 11 copied, 0 overwritten.')) -CaseName 'multi component install summary' -FailMessage $result.Output
-    Add-Result -Condition (Test-AllFilesExist -Root $multiRootSeparate -RelativePaths $RelativeLayout[0..7]) -CaseName 'multi component install file set' -FailMessage 'agent or skill files are missing'
+    Add-Result -Condition ($result.ExitCode -eq 0 -and $result.Output.Contains('Components: agents, skills') -and $result.Output.Contains('Done: 12 copied, 0 overwritten.')) -CaseName 'multi component install summary' -FailMessage $result.Output
+    Add-Result -Condition (Test-AllFilesExist -Root $multiRootSeparate -RelativePaths $RelativeLayout[0..8]) -CaseName 'multi component install file set' -FailMessage 'agent or skill files are missing'
     Add-Result -Condition (-not (Test-Path -LiteralPath (Join-Path $multiRootSeparate 'hooks/guard-pwsh-continuation.json'))) -CaseName 'multi component install skips hooks' -FailMessage 'hook was installed'
     $result = Invoke-InstallerRun -Arguments @('-Action', 'install', '-Components', 'agents', 'skills', '-Level', 'user', '-UserRoot', $multiRootSeparate)
     Add-Result -Condition ($result.ExitCode -eq 1) -CaseName 'separate values fail fast at the host' -FailMessage "exit $($result.ExitCode)"
@@ -388,7 +390,7 @@ try {
     # Case 23: duplicate component values collapse to one set.
     $dedupeRoot = New-TempRoot
     $result = Invoke-InstallerRun -Arguments (@('-Action', 'install', '-Components', 'agents,agents,skills', '-Level', 'user', '-UserRoot', $dedupeRoot) + $SubagentFlags)
-    Add-Result -Condition ($result.ExitCode -eq 0 -and $result.Output.Contains('Done: 11 copied, 0 overwritten.')) -CaseName 'duplicate components deduplicate' -FailMessage $result.Output
+    Add-Result -Condition ($result.ExitCode -eq 0 -and $result.Output.Contains('Done: 12 copied, 0 overwritten.')) -CaseName 'duplicate components deduplicate' -FailMessage $result.Output
 
     # Case 24: -Components all cannot be combined with named components.
     $result = Invoke-InstallerRun -Arguments @('-Action', 'install', '-Components', 'all,agents', '-Level', 'user', '-UserRoot', (New-TempRoot))
@@ -402,14 +404,14 @@ try {
     $multiUninstallRoot = New-TempRoot
     $null = Invoke-InstallerRun -Arguments (@('-Action', 'install', '-Components', 'agents,skills', '-Level', 'user', '-UserRoot', $multiUninstallRoot) + $SubagentFlags)
     $result = Invoke-InstallerRun -Arguments @('-Action', 'uninstall', '-Components', 'agents,skills', '-Level', 'user', '-UserRoot', $multiUninstallRoot)
-    Add-Result -Condition ($result.ExitCode -eq 0 -and $result.Output.Contains('Done: 11 removed, 0 absent, 0 leftover(s) reported.')) -CaseName 'multi component uninstall summary' -FailMessage $result.Output
+    Add-Result -Condition ($result.ExitCode -eq 0 -and $result.Output.Contains('Done: 12 removed, 0 absent, 0 leftover(s) reported.')) -CaseName 'multi component uninstall summary' -FailMessage $result.Output
     Add-Result -Condition ((Get-InstalledFileCount -Root (Join-Path $multiUninstallRoot 'skills')) -eq 0) -CaseName 'multi component uninstall empties skills' -FailMessage 'skill files survived'
 
     # Case 27: the menu accepts a multi-select component answer.
     $menuMultiProject = New-TempRoot
     $multiMenuRun = Invoke-PipedMenuRun -Answers @('1', '2,3', '2', $menuMultiProject, 'menu/owl-5.3', 'menu-owl-high', 'menu/cat-5.3', 'menu-cat-low', '1')
     Add-Result -Condition ($multiMenuRun.ExitCode -eq 0) -CaseName 'piped menu multi-select exits 0' -FailMessage $multiMenuRun.Output
-    $repoMultiLayout = $RelativeLayout[0..7] | ForEach-Object { '.github/' + $_ }
+    $repoMultiLayout = $RelativeLayout[0..8] | ForEach-Object { '.github/' + $_ }
     Add-Result -Condition (Test-AllFilesExist -Root $menuMultiProject -RelativePaths $repoMultiLayout) -CaseName 'piped menu multi-select file set' -FailMessage 'expected files are missing'
     Add-Result -Condition (-not (Test-Path -LiteralPath (Join-Path $menuMultiProject '.github/hooks/guard-pwsh-continuation.json'))) -CaseName 'piped menu multi-select skips hooks' -FailMessage 'hook was installed'
 
@@ -518,7 +520,7 @@ try {
     $skillsMenuProject = New-TempRoot
     $skillsMenuRun = Invoke-PipedMenuRun -Answers @('1', '3', '2', $skillsMenuProject, '1')
     Add-Result -Condition ($skillsMenuRun.ExitCode -eq 0 -and (-not $skillsMenuRun.Output.Contains('Which model should Owl run on?'))) -CaseName 'menu without the agents component skips the subagent questions' -FailMessage $skillsMenuRun.Output
-    Add-Result -Condition (Test-AllFilesExist -Root $skillsMenuProject -RelativePaths ($RelativeLayout[4..7] | ForEach-Object { '.github/' + $_ })) -CaseName 'skills-only menu install file set' -FailMessage 'skill files are missing'
+    Add-Result -Condition (Test-AllFilesExist -Root $skillsMenuProject -RelativePaths ($RelativeLayout[4..8] | ForEach-Object { '.github/' + $_ })) -CaseName 'skills-only menu install file set' -FailMessage 'skill files are missing'
     Add-Result -Condition (-not (Test-Path -LiteralPath (Join-Path $skillsMenuProject '.github/agents/Capybara.agent.md'))) -CaseName 'skills-only menu install skips agents' -FailMessage 'agent was installed'
 
     # Case 39: -SubagentGuard Skip installs agents without the guard, and
@@ -537,7 +539,7 @@ try {
     $forceRoot = New-TempRoot
     $result = Invoke-InstallerRun -Arguments @('-Action', 'install', '-Components', 'hooks', '-Level', 'user', '-UserRoot', $forceRoot, '-SubagentGuard', 'Force')
     Add-Result -Condition ($result.ExitCode -eq 0 -and $result.Output.Contains('Subagent delegation guard: included')) -CaseName 'SubagentGuard Force exits 0' -FailMessage $result.Output
-    Add-Result -Condition (Test-AllFilesExist -Root $forceRoot -RelativePaths ($RelativeLayout[8..10] + $SubagentGuardLayout)) -CaseName 'SubagentGuard Force file set' -FailMessage 'hook or guard files are missing'
+    Add-Result -Condition (Test-AllFilesExist -Root $forceRoot -RelativePaths ($RelativeLayout[9..11] + $SubagentGuardLayout)) -CaseName 'SubagentGuard Force file set' -FailMessage 'hook or guard files are missing'
     Add-Result -Condition (-not (Test-Path -LiteralPath (Join-Path $forceRoot 'agents/Capybara.agent.md'))) -CaseName 'SubagentGuard Force skips agents' -FailMessage 'agent was installed'
     $result = Invoke-InstallerRun -Arguments @('-Action', 'uninstall', '-Components', 'hooks', '-Level', 'user', '-UserRoot', $forceRoot)
     Add-Result -Condition ($result.ExitCode -eq 0 -and $result.Output.Contains('Done: 6 removed, 0 absent, 0 leftover(s) reported.')) -CaseName 'forced guard uninstall summary' -FailMessage $result.Output
@@ -555,7 +557,7 @@ try {
     # Case 42: a piped menu hooks-only install can force the guard in.
     $menuHooksRun = Invoke-PipedMenuRun -Answers @('1', '4', '1', '2', '1')
     Add-Result -Condition ($menuHooksRun.ExitCode -eq 0 -and $menuHooksRun.Output.Contains('Subagent delegation guard: included')) -CaseName 'piped menu hooks-only includes the guard on demand' -FailMessage $menuHooksRun.Output
-    Add-Result -Condition (Test-AllFilesExist -Root (Join-Path $menuHooksRun.UserProfile '.copilot') -RelativePaths ($RelativeLayout[8..10] + $SubagentGuardLayout)) -CaseName 'piped menu guarded hooks file set' -FailMessage 'hook or guard files are missing'
+    Add-Result -Condition (Test-AllFilesExist -Root (Join-Path $menuHooksRun.UserProfile '.copilot') -RelativePaths ($RelativeLayout[9..11] + $SubagentGuardLayout)) -CaseName 'piped menu guarded hooks file set' -FailMessage 'hook or guard files are missing'
 
     # Case 43: the same menu run with the default answer leaves the guard out.
     $menuHooksNoGuardRun = Invoke-PipedMenuRun -Answers @('1', '4', '1', '', '1')
@@ -568,10 +570,30 @@ try {
     $null = Invoke-InstallerRun -Arguments (@('-Action', 'install', '-Components', 'all', '-Level', 'user', '-UserRoot', $partialUninstallRoot) + $SubagentFlags)
     $result = Invoke-InstallerRun -Arguments @('-Action', 'uninstall', '-Components', 'agents', '-Level', 'user', '-UserRoot', $partialUninstallRoot)
     Add-Result -Condition ($result.ExitCode -eq 0 -and $result.Output.Contains('Done: 7 removed, 0 absent, 0 leftover(s) reported.')) -CaseName 'agents uninstall over a full install has no leftovers' -FailMessage $result.Output
-    Add-Result -Condition (Test-AllFilesExist -Root $partialUninstallRoot -RelativePaths $RelativeLayout[8..10]) -CaseName 'agents uninstall over a full install keeps the shell guard' -FailMessage 'shell guard files were removed'
+    Add-Result -Condition (Test-AllFilesExist -Root $partialUninstallRoot -RelativePaths $RelativeLayout[9..11]) -CaseName 'agents uninstall over a full install keeps the shell guard' -FailMessage 'shell guard files were removed'
     Add-Result -Condition (-not (Test-Path -LiteralPath (Join-Path $partialUninstallRoot 'hooks/guard-subagent-delegation.json'))) -CaseName 'agents uninstall over a full install removes the guard' -FailMessage 'guard JSON survived'
     $result = Invoke-InstallerRun -Arguments @('-Action', 'uninstall', '-Components', 'skills', '-Level', 'user', '-UserRoot', $partialUninstallRoot)
-    Add-Result -Condition ($result.ExitCode -eq 0 -and $result.Output.Contains('Done: 4 removed, 0 absent, 0 leftover(s) reported.')) -CaseName 'skills uninstall over the remains has no leftovers' -FailMessage $result.Output
+    Add-Result -Condition ($result.ExitCode -eq 0 -and $result.Output.Contains('Done: 5 removed, 0 absent, 0 leftover(s) reported.')) -CaseName 'skills uninstall over the remains has no leftovers' -FailMessage $result.Output
+    Add-Result -Condition (-not (Test-Path -LiteralPath (Join-Path $partialUninstallRoot 'skills/gh-multi-account'))) -CaseName 'skills uninstall removes gh-multi-account' -FailMessage 'gh-multi-account folder survived'
+
+    # Case 45: renamed squad skill folders are reported as leftovers and survive.
+    # The rename makes the planned skill file report as absent, the same category that
+    # a -SubagentGuard Skip uninstall reports for the guard files.
+    foreach ($skillName in 'agents-md', 'commit-message', 'gh-multi-account', 'pr-description') {
+        $leftoverSkillRoot = New-TempRoot
+        $null = Invoke-InstallerRun -Arguments @('-Action', 'install', '-Components', 'skills', '-Level', 'user', '-UserRoot', $leftoverSkillRoot)
+        $renamedSkillFolder = Join-Path (Join-Path $leftoverSkillRoot 'skills') ($skillName + '.old.disabled')
+        Move-Item -LiteralPath (Join-Path $leftoverSkillRoot ('skills/' + $skillName)) -Destination $renamedSkillFolder
+        $result = Invoke-InstallerRun -Arguments @('-Action', 'uninstall', '-Components', 'skills', '-Level', 'user', '-UserRoot', $leftoverSkillRoot)
+        $expectedSummary = 'Done: 4 removed, 1 absent, 1 leftover(s) reported.'
+        if ($skillName -eq 'agents-md') {
+            # agents-md ships two planned files (SKILL.md plus the bundled template asset),
+            # so renaming its folder reports two absent files instead of one.
+            $expectedSummary = 'Done: 3 removed, 2 absent, 1 leftover(s) reported.'
+        }
+        Add-Result -Condition ($result.ExitCode -eq 0 -and $result.Output.Contains($expectedSummary)) -CaseName ('renamed ' + $skillName + ' folder is reported as a leftover') -FailMessage $result.Output
+        Add-Result -Condition ($result.Output.Contains($renamedSkillFolder) -and (Test-Path -LiteralPath $renamedSkillFolder -PathType Container)) -CaseName ('renamed ' + $skillName + ' folder is listed and survives uninstall') -FailMessage $result.Output
+    }
 }
 finally {
     foreach ($tempRoot in $script:tempRoots) {

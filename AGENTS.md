@@ -109,7 +109,7 @@ Scripts start with `Set-StrictMode -Version 2.0` and `$ErrorActionPreference = '
 ```
 github-copilot-squad-simplified/
 ├── agents/                            # agent prompt files: Capybara, CapybaraDuo, Owl, Cat
-├── skills/                            # squad skills: agents-md, commit-message, pr-description
+├── skills/                            # squad skills: agents-md, commit-message, gh-multi-account, pr-description
 ├── hooks/                             # hook config templates: guard-pwsh-continuation, guard-subagent-delegation
 ├── scripts/                           # hook companion scripts and batteries, one folder per hook
 ├── install.ps1                        # interactive menu or flags, install and uninstall

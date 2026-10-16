@@ -134,7 +134,7 @@ $ErrorActionPreference = 'Stop'
 
 $RepoRoot = [System.IO.Path]::GetFullPath($PSScriptRoot)
 $AgentFiles = 'Capybara.agent.md', 'CapybaraDuo.agent.md', 'Cat.agent.md', 'Owl.agent.md'
-$SkillFolders = 'agents-md', 'commit-message', 'pr-description'
+$SkillFolders = 'agents-md', 'commit-message', 'gh-multi-account', 'pr-description'
 $HookShellGuardName = 'guard-pwsh-continuation'
 $HookSubagentGuardName = 'guard-subagent-delegation'
 $HookNames = $HookShellGuardName, $HookSubagentGuardName
@@ -146,7 +146,7 @@ $CatModelPlaceholder = '__CAT_MODEL__'
 $CatEffortPlaceholder = '__CAT_REASONING_EFFORT__'
 $CapybaraDuoFile = 'CapybaraDuo.agent.md'
 $AgentFilesWithPlaceholders = 'Capybara.agent.md', $CapybaraDuoFile
-$LeftoverPattern = '^(CapybaraDuo|Capybara|Cat|Owl|guard-pwsh-continuation|guard-subagent-delegation|agents-md|commit-message|pr-description)([._\- ]|$)'
+$LeftoverPattern = '^(CapybaraDuo|Capybara|Cat|Owl|guard-pwsh-continuation|guard-subagent-delegation|agents-md|commit-message|pr-description|gh-multi-account)([._\- ]|$)'
 
 function Read-MenuChoiceIndex {
     param(
@@ -218,7 +218,7 @@ function Read-ComponentMenu {
     $optionLabels = @(
         'all (agents, skills, and hooks)',
         'agents (4 custom agent profiles)',
-        'skills (3 squad skills)',
+        'skills (4 squad skills)',
         'hooks (2 guard hook configs and their companion scripts)')
     $optionValues = 'all', 'agents', 'skills', 'hooks'
     Write-Host ''
