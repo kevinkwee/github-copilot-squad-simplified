@@ -111,14 +111,15 @@ function New-HookInput {
 $failures = 0
 
 # Runs one case: expected is 'allow' (empty stdout, exit 0) or 'deny'
-# (flat decision JSON, exit 0). ReasonMustContains, when set, must appear
-# in the deny reason.
+# (flat decision JSON, exit 0). Both fragment lists apply only when the
+# decision is deny.
 function Invoke-ExpectedCase {
     param(
         [Parameter(Mandatory)][string]$Name,
         [Parameter(Mandatory)][ValidateSet('allow', 'deny')][string]$Expected,
         [Parameter(Mandatory)][string]$StdinJson,
         [string[]]$ReasonMustContains = @(),
+        [string[]]$ReasonMustNotContain = @(),
         [string]$ScriptPath = $HookScript
     )
     $result = Invoke-Hook -StdinJson $StdinJson -ScriptPath $ScriptPath
@@ -154,6 +155,13 @@ function Invoke-ExpectedCase {
                 return
             }
         }
+        foreach ($fragment in $ReasonMustNotContain) {
+            if ($parsed.permissionDecisionReason.Contains($fragment)) {
+                Write-Output "FAIL [$Name]: deny reason contains '$fragment'"
+                $script:failures++
+                return
+            }
+        }
     }
     Write-Output "PASS [$Name]: $decision"
 }
@@ -172,30 +180,39 @@ try {
         Invoke-ExpectedCase -Name 'unfilled guard template denies reviewer calls' -Expected 'deny' `
             -ScriptPath $HookTemplatePath `
             -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Owl'; model = 'm'; reasoning_effort = 'high' }) `
-            -ReasonMustContains @('not configured')
+            -ReasonMustContains @('not configured', 'Surface this to the user', 're-run the installer')
     }
 
     # Deny cases: a reviewer call missing model or reasoning_effort must be
-    # denied with an instructive reason, whatever the model.
-    $denyReasonFragments = @('model', 'reasoning_effort', 'Retry', 'Owl')
+    # denied with an instructive reason that names the expected values and
+    # sends the caller to its own instructions, regardless of the model value.
+    $denyReasonFragments = @(
+        'model', 'reasoning_effort', 'Retry', 'Owl',
+        $OwlModel, $OwlEffort, 'Subagent Delegation Rules', 'agent instructions'
+    )
     Invoke-ExpectedCase -Name 'Owl without model or effort' -Expected 'deny' `
         -StdinJson (ConvertTo-CaseJson 'Agent' @{ agent_type = 'Owl'; prompt = 'just say OK' }) `
-        -ReasonMustContains $denyReasonFragments
+        -ReasonMustContains $denyReasonFragments `
+        -ReasonMustNotContain @('guard script')
 
     Invoke-ExpectedCase -Name 'Task tool name fallback still judged' -Expected 'deny' `
         -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Owl'; prompt = 'x' })
 
     Invoke-ExpectedCase -Name 'Owl without model only' -Expected 'deny' `
         -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Owl'; prompt = 'x'; reasoning_effort = $OwlEffort }) `
-        -ReasonMustContains @('the model field', 'Owl')
+        -ReasonMustContains @('the model field', 'Owl', $OwlModel, $OwlEffort, 'Subagent Delegation Rules')
 
     Invoke-ExpectedCase -Name 'Owl without effort only' -Expected 'deny' `
         -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Owl'; prompt = 'x'; model = $OwlMatchingModel }) `
-        -ReasonMustContains @('the reasoning_effort field', 'Owl')
+        -ReasonMustContains @(
+            'the reasoning_effort field', 'Owl', $OwlModel, $OwlEffort,
+            'Subagent Delegation Rules', 'agent instructions'
+        )
 
     Invoke-ExpectedCase -Name 'Cat without model or effort' -Expected 'deny' `
         -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Cat'; prompt = 'x' }) `
-        -ReasonMustContains @('Cat', 'model', 'reasoning_effort')
+        -ReasonMustContains @('Cat', 'model', 'reasoning_effort', $CatModel, $CatEffort, 'Subagent Delegation Rules') `
+        -ReasonMustNotContain @('guard script')
 
     Invoke-ExpectedCase -Name 'lowercase agent name owl' -Expected 'deny' `
         -StdinJson (ConvertTo-CaseJson 'task' @{ agent_type = 'owl'; prompt = 'x' })
@@ -216,14 +233,19 @@ try {
     # match the installed value.
     Invoke-ExpectedCase -Name 'matching Owl model with wrong effort' -Expected 'deny' `
         -StdinJson (ConvertTo-CaseJson 'Agent' @{ agent_type = 'Owl'; prompt = 'x'; model = $OwlMatchingModel; reasoning_effort = $OtherOwlEffort }) `
-        -ReasonMustContains @('reasoning_effort', $OwlEffort, 'Owl')
+        -ReasonMustContains @('reasoning_effort', $OwlModel, $OwlEffort, 'Owl', 'Subagent Delegation Rules', 'agent instructions') `
+        -ReasonMustNotContain @('guard script')
 
     Invoke-ExpectedCase -Name 'matching Owl model with out-of-set effort' -Expected 'deny' `
         -StdinJson (ConvertTo-CaseJson 'Agent' @{ agent_type = 'Owl'; prompt = 'x'; model = $OwlMatchingModel; reasoning_effort = 'ultra' })
 
     Invoke-ExpectedCase -Name 'matching Cat model with wrong effort' -Expected 'deny' `
         -StdinJson (ConvertTo-CaseJson 'Agent' @{ agent_type = 'Cat'; prompt = 'x'; model = $CatMatchingModel; reasoning_effort = $OtherCatEffort }) `
-        -ReasonMustContains @('reasoning_effort', $CatEffort, 'Cat')
+        -ReasonMustContains @(
+            'reasoning_effort', $CatModel, $CatEffort, 'Cat',
+            'Subagent Delegation Rules', 'agent instructions'
+        ) `
+        -ReasonMustNotContain @('guard script')
 
     Invoke-ExpectedCase -Name 'matching model case-insensitive with wrong effort' -Expected 'deny' `
         -StdinJson (ConvertTo-CaseJson 'Agent' @{ agent_type = 'Owl'; prompt = 'x'; model = $OwlMatchingModel.ToUpperInvariant(); reasoning_effort = $OtherOwlEffort })
@@ -239,7 +261,7 @@ try {
     # field even though its value is not compared.
     Invoke-ExpectedCase -Name 'model override without effort still denied' -Expected 'deny' `
         -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Owl'; prompt = 'x'; model = $OverrideModel }) `
-        -ReasonMustContains @('the reasoning_effort field', 'Owl')
+        -ReasonMustContains @('the reasoning_effort field', 'Owl', $OwlModel, $OwlEffort, 'Subagent Delegation Rules')
 
     # Allow cases: presence and the conditional value check pass, and
     # non-reviewer or non-subagent calls pass through untouched.

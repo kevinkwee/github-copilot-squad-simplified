@@ -132,7 +132,8 @@ function Get-DenyReason {
         'complete statement. In PowerShell, escape a double quote inside a ' +
         'double-quoted string with a backtick (`"), prefer single-quoted ' +
         "strings, and double a single quote inside single quotes (''). Do not " +
-        'use bash-style backslash escapes.'
+        'use bash-style backslash escapes. These rules are also in the Terminal ' +
+        'Command Rules (Windows PowerShell) section of your agent instructions.'
     return $reason
 }
 

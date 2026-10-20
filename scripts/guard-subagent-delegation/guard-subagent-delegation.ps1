@@ -8,10 +8,13 @@
     without the fields the delegation rule requires on every reviewer call:
     model and reasoning_effort. Instructions alone do not enforce those
     fields, and an omitted model silently runs the reviewer on a fallback
-    model, so the deny fails loudly. The reason returned to the caller
-    names the missing fields and tells it to retry with both fields set,
-    or to surface the limitation to the user when its tool cannot set
-    them.
+    model, so the deny fails loudly. The missing-fields and effort-mismatch
+    reasons name the expected model and effort and point the caller at the
+    Subagent Delegation Rules in its own agent instructions, which hold the
+    installed values. They tell the caller to retry with both fields set, or
+    to surface the limitation to the user when its tool cannot set those
+    values. The script needs its own copy of those values to enforce the
+    rules itself.
 
     Also denies a reasoning_effort that differs from the effort installed
     for that reviewer, but only when the call's model contains the installed
@@ -165,7 +168,7 @@ $expectedEffort = $ExpectedEffortByAgent[$agentType]
 # instead of letting the containment check silently skip the effort check.
 if ($expectedModel -match '^__.*__$' -or $expectedEffort -match '^__.*__$') {
     $reason = "The subagent call to $agentType was denied because the installed delegation guard is not " +
-        'configured for that reviewer. Re-run the installer or fill the guard script''s four reviewer constants.'
+        'configured for that reviewer. Surface this to the user and ask them to re-run the installer.'
     Write-Deny -Reason $reason
 }
 
@@ -186,10 +189,11 @@ if ($missingFields.Count -gt 0) {
 
     $reason = "The subagent call to $agentType was denied because it omits $fieldDescription that the " +
         'delegation rule requires on every reviewer call. Retry the call with ' +
-        'model set to the first available match of the configured reviewer ' +
-        'model and reasoning_effort set to the configured effort. If the ' +
-        'calling tool cannot set both fields, surface the limitation to the ' +
-        'user instead of retrying without them or skipping the review.'
+        "model set to the first available model that matches '$expectedModel' and " +
+        "reasoning_effort set to '$expectedEffort'. Both values are in the " +
+        'Subagent Delegation Rules of your agent instructions. ' +
+        'If the calling tool cannot set both fields, surface the limitation ' +
+        'to the user instead of retrying without them or skipping the review.'
 
     Write-Deny -Reason $reason
 }
@@ -202,9 +206,12 @@ $effort = Get-ToolInputValue -ToolInput $toolInput -Names $RequiredFieldNamesByN
 $modelContainsExpectedModel = $model.Trim().IndexOf($expectedModel, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
 if ($modelContainsExpectedModel -and ($effort.Trim() -ne $expectedEffort)) {
     $reason = "The subagent call to $agentType was denied because its reasoning_effort does not match " +
-        "the effort installed for the reviewer model '$expectedModel'. Retry the call with " +
-        "reasoning_effort set to '$expectedEffort'. If the calling tool cannot set that value, " +
-        'surface the limitation to the user instead of retrying with another value or skipping the review.'
+        'the installed effort for that reviewer. Retry the call with ' +
+        "model set to the first available model that matches '$expectedModel' and " +
+        "reasoning_effort set to '$expectedEffort'. Both values are in the " +
+        'Subagent Delegation Rules of your agent instructions. ' +
+        'If the calling tool cannot set that value, surface the limitation ' +
+        'to the user instead of retrying with another value or skipping the review.'
     Write-Deny -Reason $reason
 }
 

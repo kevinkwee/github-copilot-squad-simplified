@@ -152,6 +152,43 @@ else {
     $failures++
 }
 
+# A deny reason keeps the parser diagnostic, points at the Terminal Command
+# Rules in the caller's agent instructions, and does not mention the guard
+# script itself.
+$stdinJson = (New-HookInput -ToolName 'Bash' -ToolInput @{ command = 'rg -n "foo' }) |
+    ConvertTo-Json -Depth 6 -Compress
+$result = Invoke-Hook -StdinJson $stdinJson
+$expected = Get-ExpectedVerdict -Expected 'deny'
+$parsed = if ([string]::IsNullOrWhiteSpace($result.Stdout)) { $null }
+    else { $result.Stdout | ConvertFrom-Json }
+$decision = if ($parsed) { $parsed.permissionDecision } else { 'allow' }
+$reasonFragments = @(
+    'PowerShell would open the continuation prompt',
+    'missing the terminator',
+    'Terminal Command Rules (Windows PowerShell)',
+    'agent instructions'
+)
+$reasonProblem = ''
+if ($decision -eq 'deny') {
+    foreach ($fragment in $reasonFragments) {
+        if (-not $parsed.permissionDecisionReason.Contains($fragment)) {
+            $reasonProblem = "deny reason lacks '$fragment'"
+            break
+        }
+    }
+    if (-not $reasonProblem -and $parsed.permissionDecisionReason.Contains('guard script')) {
+        $reasonProblem = "deny reason contains 'guard script'"
+    }
+}
+if ($result.ExitCode -eq 0 -and $decision -eq $expected -and -not $reasonProblem) {
+    Write-Output "PASS [deny reason points at the agent instructions]: $decision"
+}
+else {
+    $detail = if ($reasonProblem) { " ($reasonProblem)" } else { '' }
+    Write-Output "FAIL [deny reason points at the agent instructions]: expected $expected, got $decision$detail"
+    $failures++
+}
+
 # A command that is complete must produce NO stdout at all (allow by default).
 $stdinJson = (New-HookInput -ToolName 'Bash' -ToolInput @{ command = 'Get-Date' }) |
     ConvertTo-Json -Depth 6 -Compress
