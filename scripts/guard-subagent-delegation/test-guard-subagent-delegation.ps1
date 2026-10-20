@@ -16,11 +16,76 @@
 #>
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$HookScript = Join-Path $ScriptDir 'guard-subagent-delegation.ps1'
+$HookTemplatePath = Join-Path $ScriptDir 'guard-subagent-delegation.ps1'
+
+# The repo template carries placeholders and an installed copy carries real
+# values. Fill any remaining placeholders with test values, then read the
+# effective values from the rendered text so the cases below work in both
+# places.
+$RenderedHookText = [System.IO.File]::ReadAllText($HookTemplatePath)
+$RenderedHookText = $RenderedHookText.Replace('__OWL_MODEL__', 'test/Owl-Model')
+$RenderedHookText = $RenderedHookText.Replace('__CAT_MODEL__', 'test/Cat-Model')
+$RenderedHookText = $RenderedHookText.Replace('__OWL_REASONING_EFFORT__', 'high')
+$RenderedHookText = $RenderedHookText.Replace('__CAT_REASONING_EFFORT__', 'low')
+
+$valuePatterns = @{
+    OwlModel           = '(?m)^\$OwlModel = ''([^'']*)''\r?$'
+    CatModel           = '(?m)^\$CatModel = ''([^'']*)''\r?$'
+    OwlReasoningEffort = '(?m)^\$OwlReasoningEffort = ''([^'']*)''\r?$'
+    CatReasoningEffort = '(?m)^\$CatReasoningEffort = ''([^'']*)''\r?$'
+}
+$renderedValues = @{}
+foreach ($valueName in $valuePatterns.Keys) {
+    if ($RenderedHookText -notmatch $valuePatterns[$valueName]) {
+        throw "The guard script does not define $valueName."
+    }
+    $renderedValues[$valueName] = $Matches[1]
+}
+$OwlModel = $renderedValues.OwlModel
+$CatModel = $renderedValues.CatModel
+$OwlEffort = $renderedValues.OwlReasoningEffort
+$CatEffort = $renderedValues.CatReasoningEffort
+$OwlMatchingModel = 'prefix/' + $OwlModel
+$CatMatchingModel = 'prefix/' + $CatModel
+
+function Get-DifferentEffort {
+    param([Parameter(Mandatory)][string]$ConfiguredEffort)
+    foreach ($candidate in @('none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max')) {
+        if ($candidate -ne $ConfiguredEffort) { return $candidate }
+    }
+    throw "No alternative effort exists for '$ConfiguredEffort'."
+}
+
+# Returns a single printable character that cannot appear inside the configured
+# model, so the resulting value is guaranteed not to contain it.
+function New-NonMatchingModel {
+    param([Parameter(Mandatory)][string]$ConfiguredModel)
+    if ([string]::IsNullOrWhiteSpace($ConfiguredModel)) {
+        throw 'The configured model value is empty.'
+    }
+    for ($code = 33; $code -le 126; $code++) {
+        $candidate = [string][char]$code
+        if ($ConfiguredModel.IndexOf($candidate, [System.StringComparison]::OrdinalIgnoreCase) -lt 0) {
+            return $candidate
+        }
+    }
+    throw 'No printable character is absent from the configured model.'
+}
+
+$OtherOwlEffort = Get-DifferentEffort -ConfiguredEffort $OwlEffort
+$OtherCatEffort = Get-DifferentEffort -ConfiguredEffort $CatEffort
+$OverrideModel = New-NonMatchingModel -ConfiguredModel $OwlModel
+$CatOverrideModel = New-NonMatchingModel -ConfiguredModel $CatModel
+
+$HookScript = Join-Path ([System.IO.Path]::GetTempPath()) ('guard-subagent-delegation-' + [System.Guid]::NewGuid().ToString('N') + '.ps1')
+[System.IO.File]::WriteAllText($HookScript, $RenderedHookText)
 
 function Invoke-Hook {
-    param([Parameter(Mandatory)][string]$StdinJson)
-    $stdout = $StdinJson | & pwsh -NoProfile -ExecutionPolicy Bypass -File $HookScript
+    param(
+        [Parameter(Mandatory)][string]$StdinJson,
+        [Parameter(Mandatory)][string]$ScriptPath
+    )
+    $stdout = $StdinJson | & pwsh -NoProfile -ExecutionPolicy Bypass -File $ScriptPath
     [pscustomobject]@{
         Stdout   = ($stdout | Out-String).Trim()
         ExitCode = $LASTEXITCODE
@@ -53,9 +118,10 @@ function Invoke-ExpectedCase {
         [Parameter(Mandatory)][string]$Name,
         [Parameter(Mandatory)][ValidateSet('allow', 'deny')][string]$Expected,
         [Parameter(Mandatory)][string]$StdinJson,
-        [string[]]$ReasonMustContains = @()
+        [string[]]$ReasonMustContains = @(),
+        [string]$ScriptPath = $HookScript
     )
-    $result = Invoke-Hook -StdinJson $StdinJson
+    $result = Invoke-Hook -StdinJson $StdinJson -ScriptPath $ScriptPath
     if ($result.ExitCode -ne 0) {
         Write-Output "FAIL [$Name]: hook exited with $($result.ExitCode)"
         $script:failures++
@@ -98,108 +164,171 @@ function ConvertTo-CaseJson {
         ConvertTo-Json -Depth 8 -Compress
 }
 
-# Deny cases: a reviewer call missing model or reasoning_effort must be
-# denied with an instructive reason.
-$denyReasonFragments = @('model', 'reasoning_effort', 'Retry', 'Owl')
-Invoke-ExpectedCase -Name 'Owl without model or effort' -Expected 'deny' `
-    -StdinJson (ConvertTo-CaseJson 'Agent' @{ agent_type = 'Owl'; prompt = 'just say OK' }) `
-    -ReasonMustContains $denyReasonFragments
+try {
+    # The repo template ships placeholders. A copy that reaches use without
+    # the installer must deny rather than silently skip the effort check.
+    $rawTemplateText = [System.IO.File]::ReadAllText($HookTemplatePath)
+    if ($rawTemplateText.Contains('__OWL_MODEL__')) {
+        Invoke-ExpectedCase -Name 'unfilled guard template denies reviewer calls' -Expected 'deny' `
+            -ScriptPath $HookTemplatePath `
+            -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Owl'; model = 'm'; reasoning_effort = 'high' }) `
+            -ReasonMustContains @('not configured')
+    }
 
-Invoke-ExpectedCase -Name 'Task tool name fallback still judged' -Expected 'deny' `
-    -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Owl'; prompt = 'x' })
+    # Deny cases: a reviewer call missing model or reasoning_effort must be
+    # denied with an instructive reason, whatever the model.
+    $denyReasonFragments = @('model', 'reasoning_effort', 'Retry', 'Owl')
+    Invoke-ExpectedCase -Name 'Owl without model or effort' -Expected 'deny' `
+        -StdinJson (ConvertTo-CaseJson 'Agent' @{ agent_type = 'Owl'; prompt = 'just say OK' }) `
+        -ReasonMustContains $denyReasonFragments
 
-Invoke-ExpectedCase -Name 'Owl without model only' -Expected 'deny' `
-    -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Owl'; prompt = 'x'; reasoning_effort = 'max' }) `
-    -ReasonMustContains @('the model field', 'Owl')
+    Invoke-ExpectedCase -Name 'Task tool name fallback still judged' -Expected 'deny' `
+        -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Owl'; prompt = 'x' })
 
-Invoke-ExpectedCase -Name 'Owl without effort only' -Expected 'deny' `
-    -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Owl'; prompt = 'x'; model = 'GLM-5.3' }) `
-    -ReasonMustContains @('the reasoning_effort field', 'Owl')
+    Invoke-ExpectedCase -Name 'Owl without model only' -Expected 'deny' `
+        -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Owl'; prompt = 'x'; reasoning_effort = $OwlEffort }) `
+        -ReasonMustContains @('the model field', 'Owl')
 
-Invoke-ExpectedCase -Name 'Cat without model or effort' -Expected 'deny' `
-    -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Cat'; prompt = 'x' }) `
-    -ReasonMustContains @('Cat', 'model', 'reasoning_effort')
+    Invoke-ExpectedCase -Name 'Owl without effort only' -Expected 'deny' `
+        -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Owl'; prompt = 'x'; model = $OwlMatchingModel }) `
+        -ReasonMustContains @('the reasoning_effort field', 'Owl')
 
-Invoke-ExpectedCase -Name 'lowercase agent name owl' -Expected 'deny' `
-    -StdinJson (ConvertTo-CaseJson 'task' @{ agent_type = 'owl'; prompt = 'x' })
+    Invoke-ExpectedCase -Name 'Cat without model or effort' -Expected 'deny' `
+        -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Cat'; prompt = 'x' }) `
+        -ReasonMustContains @('Cat', 'model', 'reasoning_effort')
 
-Invoke-ExpectedCase -Name 'camelCase agentType still guarded' -Expected 'deny' `
-    -StdinJson (ConvertTo-CaseJson 'Task' @{ agentType = 'Owl'; prompt = 'x' })
+    Invoke-ExpectedCase -Name 'lowercase agent name owl' -Expected 'deny' `
+        -StdinJson (ConvertTo-CaseJson 'task' @{ agent_type = 'owl'; prompt = 'x' })
 
-Invoke-ExpectedCase -Name 'empty string model counts as missing' -Expected 'deny' `
-    -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Owl'; model = ''; reasoning_effort = 'max' })
+    Invoke-ExpectedCase -Name 'camelCase agentType still guarded' -Expected 'deny' `
+        -StdinJson (ConvertTo-CaseJson 'Task' @{ agentType = 'Owl'; prompt = 'x' })
 
-Invoke-ExpectedCase -Name 'whitespace model counts as missing' -Expected 'deny' `
-    -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Owl'; model = '   '; reasoning_effort = 'max' })
+    Invoke-ExpectedCase -Name 'empty string model counts as missing' -Expected 'deny' `
+        -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Owl'; model = ''; reasoning_effort = $OwlEffort })
 
-Invoke-ExpectedCase -Name 'null model counts as missing' -Expected 'deny' `
-    -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Owl'; model = $null; reasoning_effort = 'max' })
+    Invoke-ExpectedCase -Name 'whitespace model counts as missing' -Expected 'deny' `
+        -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Owl'; model = '   '; reasoning_effort = $OwlEffort })
 
-# Allow cases: presence only enforcement, and non-reviewer or non-subagent
-# calls pass through untouched.
-Invoke-ExpectedCase -Name 'Owl with both fields' -Expected 'allow' `
-    -StdinJson (ConvertTo-CaseJson 'Agent' @{ agent_type = 'Owl'; prompt = 'x'; model = 'GLM-5.3'; reasoning_effort = 'max' })
+    Invoke-ExpectedCase -Name 'null model counts as missing' -Expected 'deny' `
+        -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Owl'; model = $null; reasoning_effort = $OwlEffort })
 
-Invoke-ExpectedCase -Name 'a model the user names still allowed' -Expected 'allow' `
-    -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Owl'; prompt = 'x'; model = 'user-named-opus'; reasoning_effort = 'low' })
+    # Deny cases: the call uses the configured model, so the effort must
+    # match the installed value.
+    Invoke-ExpectedCase -Name 'matching Owl model with wrong effort' -Expected 'deny' `
+        -StdinJson (ConvertTo-CaseJson 'Agent' @{ agent_type = 'Owl'; prompt = 'x'; model = $OwlMatchingModel; reasoning_effort = $OtherOwlEffort }) `
+        -ReasonMustContains @('reasoning_effort', $OwlEffort, 'Owl')
 
-Invoke-ExpectedCase -Name 'Cat with both fields' -Expected 'allow' `
-    -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Cat'; prompt = 'x'; model = 'flash'; reasoning_effort = 'low' })
+    Invoke-ExpectedCase -Name 'matching Owl model with out-of-set effort' -Expected 'deny' `
+        -StdinJson (ConvertTo-CaseJson 'Agent' @{ agent_type = 'Owl'; prompt = 'x'; model = $OwlMatchingModel; reasoning_effort = 'ultra' })
 
-Invoke-ExpectedCase -Name 'camelCase reasoningEffort accepted' -Expected 'allow' `
-    -StdinJson (ConvertTo-CaseJson 'Task' @{ agentType = 'owl'; model = 'm'; reasoningEffort = 'max' })
+    Invoke-ExpectedCase -Name 'matching Cat model with wrong effort' -Expected 'deny' `
+        -StdinJson (ConvertTo-CaseJson 'Agent' @{ agent_type = 'Cat'; prompt = 'x'; model = $CatMatchingModel; reasoning_effort = $OtherCatEffort }) `
+        -ReasonMustContains @('reasoning_effort', $CatEffort, 'Cat')
 
-Invoke-ExpectedCase -Name 'mixed case keys recognized' -Expected 'allow' `
-    -StdinJson (ConvertTo-CaseJson 'Agent' @{ agentType = 'owl'; Model = 'm'; reasoningEffort = 'max' })
+    Invoke-ExpectedCase -Name 'matching model case-insensitive with wrong effort' -Expected 'deny' `
+        -StdinJson (ConvertTo-CaseJson 'Agent' @{ agent_type = 'Owl'; prompt = 'x'; model = $OwlMatchingModel.ToUpperInvariant(); reasoning_effort = $OtherOwlEffort })
 
-Invoke-ExpectedCase -Name 'entry point agent not guarded' -Expected 'allow' `
-    -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Capybara'; prompt = 'x' })
+    Invoke-ExpectedCase -Name 'configured model inside a longer model with wrong effort' -Expected 'deny' `
+        -StdinJson (ConvertTo-CaseJson 'Agent' @{ agent_type = 'Owl'; prompt = 'x'; model = ('vendor/' + $OwlModel + '/preview'); reasoning_effort = $OtherOwlEffort })
 
-Invoke-ExpectedCase -Name 'Duo agent not guarded' -Expected 'allow' `
-    -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Capybara Duo'; prompt = 'x' })
+    Invoke-ExpectedCase -Name 'lowercase agent type still compares effort' -Expected 'deny' `
+        -StdinJson (ConvertTo-CaseJson 'Agent' @{ agent_type = 'owl'; prompt = 'x'; model = $OwlMatchingModel; reasoning_effort = $OtherOwlEffort }) `
+        -ReasonMustContains @('reasoning_effort', $OwlEffort)
 
-Invoke-ExpectedCase -Name 'built-in agent not guarded' -Expected 'allow' `
-    -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'general-purpose'; prompt = 'x' })
+    # Presence is unconditional, so a model override cannot omit the effort
+    # field even though its value is not compared.
+    Invoke-ExpectedCase -Name 'model override without effort still denied' -Expected 'deny' `
+        -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Owl'; prompt = 'x'; model = $OverrideModel }) `
+        -ReasonMustContains @('the reasoning_effort field', 'Owl')
 
-Invoke-ExpectedCase -Name 'missing agent_type fails open' -Expected 'allow' `
-    -StdinJson (ConvertTo-CaseJson 'Task' @{ prompt = 'x' })
+    # Allow cases: presence and the conditional value check pass, and
+    # non-reviewer or non-subagent calls pass through untouched.
+    Invoke-ExpectedCase -Name 'Owl with matching model and exact effort' -Expected 'allow' `
+        -StdinJson (ConvertTo-CaseJson 'Agent' @{ agent_type = 'Owl'; prompt = 'x'; model = $OwlMatchingModel; reasoning_effort = $OwlEffort })
 
-Invoke-ExpectedCase -Name 'null agent_type fails open' -Expected 'allow' `
-    -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = $null; prompt = 'x' })
+    Invoke-ExpectedCase -Name 'Owl matching effort is case-insensitive' -Expected 'allow' `
+        -StdinJson (ConvertTo-CaseJson 'Agent' @{ agent_type = 'Owl'; prompt = 'x'; model = $OwlMatchingModel; reasoning_effort = $OwlEffort.ToUpperInvariant() })
 
-# A non-subagent tool must early-exit without judging the payload, whatever
-# the payload carries.
-Invoke-ExpectedCase -Name 'other tool not guarded' -Expected 'allow' `
-    -StdinJson (ConvertTo-CaseJson 'Bash' @{ agent_type = 'Owl'; prompt = 'x' })
+    Invoke-ExpectedCase -Name 'effort surrounding whitespace is trimmed' -Expected 'allow' `
+        -StdinJson (ConvertTo-CaseJson 'Agent' @{ agent_type = 'Owl'; prompt = 'x'; model = $OwlMatchingModel; reasoning_effort = ('  ' + $OwlEffort + '  ') })
 
-Invoke-ExpectedCase -Name 'wrong event name not guarded' -Expected 'allow' `
-    -StdinJson ((New-HookInput -ToolName 'Task' -ToolInput @{ agent_type = 'Owl' } -EventName 'PostToolUse') |
-        ConvertTo-Json -Depth 8 -Compress)
+    Invoke-ExpectedCase -Name 'a model the user names with another effort is allowed' -Expected 'allow' `
+        -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Owl'; prompt = 'x'; model = $OverrideModel; reasoning_effort = $OtherOwlEffort })
 
-Invoke-ExpectedCase -Name 'null tool_input fails open' -Expected 'allow' `
-    -StdinJson (ConvertTo-CaseJson 'Task' $null)
+    Invoke-ExpectedCase -Name 'a model the user names with an out-of-set effort is allowed' -Expected 'allow' `
+        -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Owl'; prompt = 'x'; model = $OverrideModel; reasoning_effort = 'ultra' })
 
-Invoke-ExpectedCase -Name 'empty stdin fails open' -Expected 'allow' `
-    -StdinJson '  '
+    Invoke-ExpectedCase -Name 'Cat with matching model and exact effort' -Expected 'allow' `
+        -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Cat'; prompt = 'x'; model = $CatMatchingModel; reasoning_effort = $CatEffort })
 
-Invoke-ExpectedCase -Name 'malformed stdin fails open' -Expected 'allow' `
-    -StdinJson 'not json at all'
+    Invoke-ExpectedCase -Name 'Cat with a model override and another effort' -Expected 'allow' `
+        -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Cat'; prompt = 'x'; model = $CatOverrideModel; reasoning_effort = $OtherCatEffort })
 
-# A tool_input delivered as a raw JSON string is normalized before the
-# field checks, in both directions.
-$stringDenoInput = '{"agent_type":"Owl","prompt":"x"}'
-Invoke-ExpectedCase -Name 'string tool_input judged' -Expected 'deny' `
-    -StdinJson ((New-HookInput -ToolName 'Task' -ToolInput $stringDenoInput) |
-        ConvertTo-Json -Depth 8 -Compress)
+    Invoke-ExpectedCase -Name 'camelCase reasoningEffort accepted' -Expected 'allow' `
+        -StdinJson (ConvertTo-CaseJson 'Task' @{ agentType = 'owl'; model = $OwlMatchingModel; reasoningEffort = $OwlEffort })
 
-$stringAllowInput = '{"agent_type":"Owl","model":"GLM-5.3","reasoning_effort":"max"}'
-Invoke-ExpectedCase -Name 'string tool_input with fields allowed' -Expected 'allow' `
-    -StdinJson ((New-HookInput -ToolName 'Task' -ToolInput $stringAllowInput) |
-        ConvertTo-Json -Depth 8 -Compress)
+    Invoke-ExpectedCase -Name 'mixed case keys recognized' -Expected 'allow' `
+        -StdinJson (ConvertTo-CaseJson 'Agent' @{ agentType = 'owl'; Model = $OwlMatchingModel; reasoningEffort = $OwlEffort })
+
+    Invoke-ExpectedCase -Name 'entry point agent not guarded' -Expected 'allow' `
+        -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Capybara'; prompt = 'x' })
+
+    Invoke-ExpectedCase -Name 'Duo agent not guarded' -Expected 'allow' `
+        -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'Capybara Duo'; prompt = 'x' })
+
+    Invoke-ExpectedCase -Name 'built-in agent not guarded' -Expected 'allow' `
+        -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = 'general-purpose'; prompt = 'x' })
+
+    Invoke-ExpectedCase -Name 'missing agent_type fails open' -Expected 'allow' `
+        -StdinJson (ConvertTo-CaseJson 'Task' @{ prompt = 'x' })
+
+    Invoke-ExpectedCase -Name 'null agent_type fails open' -Expected 'allow' `
+        -StdinJson (ConvertTo-CaseJson 'Task' @{ agent_type = $null; prompt = 'x' })
+
+    # A non-subagent tool must early-exit without judging the payload, whatever
+    # the payload carries.
+    Invoke-ExpectedCase -Name 'other tool not guarded' -Expected 'allow' `
+        -StdinJson (ConvertTo-CaseJson 'Bash' @{ agent_type = 'Owl'; prompt = 'x' })
+
+    Invoke-ExpectedCase -Name 'wrong event name not guarded' -Expected 'allow' `
+        -StdinJson ((New-HookInput -ToolName 'Task' -ToolInput @{ agent_type = 'Owl' } -EventName 'PostToolUse') |
+            ConvertTo-Json -Depth 8 -Compress)
+
+    Invoke-ExpectedCase -Name 'null tool_input fails open' -Expected 'allow' `
+        -StdinJson (ConvertTo-CaseJson 'Task' $null)
+
+    Invoke-ExpectedCase -Name 'empty stdin fails open' -Expected 'allow' `
+        -StdinJson '  '
+
+    Invoke-ExpectedCase -Name 'malformed stdin fails open' -Expected 'allow' `
+        -StdinJson 'not json at all'
+
+    # A tool_input delivered as a raw JSON string is normalized before the
+    # field checks, in both directions.
+    $stringDenyInput = (@{ agent_type = 'Owl'; prompt = 'x' } | ConvertTo-Json -Compress)
+    Invoke-ExpectedCase -Name 'string tool_input judged' -Expected 'deny' `
+        -StdinJson ((New-HookInput -ToolName 'Task' -ToolInput $stringDenyInput) |
+            ConvertTo-Json -Depth 8 -Compress)
+
+    $stringAllowInput = (@{ agent_type = 'Owl'; model = $OwlMatchingModel; reasoning_effort = $OwlEffort } | ConvertTo-Json -Compress)
+    Invoke-ExpectedCase -Name 'string tool_input with fields allowed' -Expected 'allow' `
+        -StdinJson ((New-HookInput -ToolName 'Task' -ToolInput $stringAllowInput) |
+            ConvertTo-Json -Depth 8 -Compress)
+
+    if ($failures -gt 0) {
+        Write-Output "$failures case(s) failed."
+    }
+    else {
+        Write-Output 'All cases passed.'
+    }
+}
+finally {
+    if (Test-Path -LiteralPath $HookScript) {
+        Remove-Item -LiteralPath $HookScript -Force -ErrorAction SilentlyContinue
+    }
+}
 
 if ($failures -gt 0) {
-    Write-Output "$failures case(s) failed."
     exit 1
 }
-Write-Output 'All cases passed.'
 exit 0

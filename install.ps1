@@ -22,11 +22,14 @@
     Two hooks ship. The shell guard (guard-pwsh-continuation) always travels
     with the hooks component. The subagent delegation guard
     (guard-subagent-delegation) denies a reviewer subagent call that omits
-    the model or reasoning effort field, and travels per -SubagentGuard: Auto
-    installs it with the agents component, Skip leaves it out, and Force
-    installs it into any install that includes the agents or hooks
+    the model or reasoning effort field, and it also denies an effort that
+    differs from the installed reviewer effort when the call's model
+    contains the installed reviewer model. It travels per -SubagentGuard:
+    Auto installs it with the agents component, Skip leaves it out, and
+    Force installs it into any install that includes the agents or hooks
     component, for example a hooks-only install when the agents were copied
-    by hand.
+    by hand. The guard script is rewritten with the four reviewer values, so
+    a hooks-only guard install also requires them.
 
     The agents component rewrites the two Capybara templates the same way,
     filling the Owl and Cat placeholder pairs with the values collected by
@@ -35,7 +38,9 @@
     only the Owl pair. The model values may be full ids, or a distinctive
     part of the name such as GLM-5.3. The values do not have to match
     exactly, and the installed delegation rule resolves them to the first
-    available match at run time.
+    available match at run time. Reasoning effort values are limited to
+    none, minimal, low, medium, high, xhigh, and max, accepted without
+    regard to case and stored in lowercase.
 
 .PARAMETER Action
     install (default) or uninstall.
@@ -57,24 +62,36 @@
 
 .PARAMETER OwlModel
     Model value copied into __OWL_MODEL__ in the installed Capybara
-    templates. May be the full id, or a distinctive part of the name, for
-    example GLM-5.3. Required on scripted installs that include the agents
-    component.
+    templates and in the installed subagent delegation guard. May be the
+    full id, or a distinctive part of the name, for example GLM-5.3. The
+    value cannot contain a single quote or a newline, because the installed
+    guard script embeds it in a single-quoted PowerShell literal that must
+    stay on one line, and cannot be a placeholder. Required on scripted
+    installs that include the agents component or the subagent delegation
+    guard.
 
 .PARAMETER OwlReasoningEffort
     Reasoning effort copied into __OWL_REASONING_EFFORT__ in the installed
-    Capybara templates. Required on scripted installs that include the
-    agents component.
+    Capybara templates and in the installed subagent delegation guard. One
+    of none, minimal, low, medium, high, xhigh, or max, accepted without
+    regard to case. Required on scripted installs that include the agents
+    component or the subagent delegation guard.
 
 .PARAMETER CatModel
-    Model value copied into __CAT_MODEL__ in the installed Capybara template.
-    May be the full id, or a distinctive part of the name. Required on
-    scripted installs that include the agents component.
+    Model value copied into __CAT_MODEL__ in the installed Capybara template
+    and in the installed subagent delegation guard. May be the full id, or a
+    distinctive part of the name. The value cannot contain a single quote or
+    a newline, because the installed guard script embeds it in a
+    single-quoted PowerShell literal that must stay on one line, and cannot
+    be a placeholder. Required on scripted installs that include the agents
+    component or the subagent delegation guard.
 
 .PARAMETER CatReasoningEffort
     Reasoning effort copied into __CAT_REASONING_EFFORT__ in the installed
-    Capybara template. Required on scripted installs that include the
-    agents component.
+    Capybara template and in the installed subagent delegation guard. One of
+    none, minimal, low, medium, high, xhigh, or max, accepted without regard
+    to case. Required on scripted installs that include the agents component
+    or the subagent delegation guard.
 
 .PARAMETER SubagentGuard
     How the subagent delegation guard hook travels. Auto (default) installs
@@ -82,8 +99,10 @@
     fails fast on any install that does not include the agents component.
     Force installs it into any install that includes the agents or hooks
     component, for example a hooks-only install for a hand-maintained
-    agents folder, and fails fast when neither is selected. Only install
-    runs accept a non-Auto value.
+    agents folder, and fails fast when neither is selected. The guard embeds
+    the four reviewer values, so installs that include it require all four
+    even when the agents component is not selected. Only install runs accept
+    a non-Auto value.
 
 .EXAMPLE
     pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1
@@ -95,7 +114,7 @@
     pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Action install -Components hooks -Level repo -ProjectRoot C:\projects\my-app
 
 .EXAMPLE
-    pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Action install -Components hooks -Level user -SubagentGuard Force
+    pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Action install -Components hooks -Level user -SubagentGuard Force -OwlModel 'GLM-5.3' -OwlReasoningEffort high -CatModel 'flash' -CatReasoningEffort low
 
 .EXAMPLE
     pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Action uninstall -Level user
@@ -119,10 +138,12 @@ param(
 
     [string]$OwlModel,
 
+    [ValidateSet('none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max')]
     [string]$OwlReasoningEffort,
 
     [string]$CatModel,
 
+    [ValidateSet('none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max')]
     [string]$CatReasoningEffort,
 
     [ValidateSet('Auto', 'Skip', 'Force')]
@@ -146,6 +167,11 @@ $CatModelPlaceholder = '__CAT_MODEL__'
 $CatEffortPlaceholder = '__CAT_REASONING_EFFORT__'
 $CapybaraDuoFile = 'CapybaraDuo.agent.md'
 $AgentFilesWithPlaceholders = 'Capybara.agent.md', $CapybaraDuoFile
+# Parameter attributes cannot reference variables in Windows PowerShell 5.1,
+# so the ValidateSet lists on the effort parameters repeat these values.
+$ReasoningEffortValues = @('none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max')
+$DefaultOwlReasoningEffort = 'high'
+$DefaultCatReasoningEffort = 'low'
 $LeftoverPattern = '^(CapybaraDuo|Capybara|Cat|Owl|guard-pwsh-continuation|guard-subagent-delegation|agents-md|commit-message|gh-multi-account|merge-strategy|pr-description)([._\- ]|$)'
 
 function Read-MenuChoiceIndex {
@@ -212,6 +238,28 @@ function Read-NonEmptyPrompt {
         Write-Host 'Please enter a non-empty value.' -ForegroundColor Yellow
     }
     throw 'No valid value was entered.'
+}
+
+function Read-ReasoningEffortPrompt {
+    param(
+        [Parameter(Mandatory)][string]$Prompt,
+        [Parameter(Mandatory)][string]$DefaultEffort
+    )
+    $defaultIndex = [array]::IndexOf($ReasoningEffortValues, $DefaultEffort)
+    if ($defaultIndex -lt 0) {
+        throw "The default reasoning effort '$DefaultEffort' is not in the valid effort list."
+    }
+    $choiceIndex = Read-MenuChoiceIndex -Prompt $Prompt -OptionLabels $ReasoningEffortValues -DefaultIndex $defaultIndex
+    return $ReasoningEffortValues[$choiceIndex]
+}
+
+function Read-ReviewerSettings {
+    $settings = @{ OwlModel = ''; OwlEffort = ''; CatModel = ''; CatEffort = '' }
+    $settings.OwlModel = Read-NonEmptyPrompt -Prompt 'Which model should Owl run on? Type any distinctive part of a model name.' -Example 'for example: GLM-5.3'
+    $settings.OwlEffort = Read-ReasoningEffortPrompt -Prompt 'Which reasoning effort should Owl use?' -DefaultEffort $DefaultOwlReasoningEffort
+    $settings.CatModel = Read-NonEmptyPrompt -Prompt 'Which model should Cat run on? Type any distinctive part of a model name.' -Example 'for example: flash'
+    $settings.CatEffort = Read-ReasoningEffortPrompt -Prompt 'Which reasoning effort should Cat use?' -DefaultEffort $DefaultCatReasoningEffort
+    return $settings
 }
 
 function Read-ComponentMenu {
@@ -294,10 +342,7 @@ function Show-Menu {
     if ($actionValues[$actionIndex] -eq 'install') {
         $selectedTokens = @($componentSelection)
         if (($selectedTokens -contains 'agents') -or ($selectedTokens -contains 'all')) {
-            $reviewerSettings.OwlModel = Read-NonEmptyPrompt -Prompt 'Which model should Owl run on? Type any distinctive part of a model name.' -Example 'for example: GLM-5.3'
-            $reviewerSettings.OwlEffort = Read-NonEmptyPrompt -Prompt 'Which reasoning effort should Owl use?' -Example 'for example: high (common values are low, medium, high)'
-            $reviewerSettings.CatModel = Read-NonEmptyPrompt -Prompt 'Which model should Cat run on? Type any distinctive part of a model name.' -Example 'for example: flash'
-            $reviewerSettings.CatEffort = Read-NonEmptyPrompt -Prompt 'Which reasoning effort should Cat use?' -Example 'for example: low (common values are low, medium, high)'
+            $reviewerSettings = Read-ReviewerSettings
         }
         elseif ($selectedTokens -contains 'hooks') {
             $guardIndex = Read-MenuChoiceIndex 'Include the subagent delegation guard hook with the shell guard?' @(
@@ -305,6 +350,7 @@ function Show-Menu {
                 'yes, also enforce reviewer model and reasoning effort fields') 0
             if ($guardIndex -eq 1) {
                 $subagentGuard = 'Force'
+                $reviewerSettings = Read-ReviewerSettings
             }
         }
     }
@@ -362,34 +408,77 @@ function Confirm-ParameterCombo {
     }
 }
 
+# A guard install needs the reviewer values because the installed script
+# embeds them. Uninstall plans include the guard whenever agents or hooks
+# are selected so the same files are removed.
+function Test-GuardHookIncluded {
+    param(
+        [Parameter(Mandatory)][string]$ActionValue,
+        [Parameter(Mandatory)][string[]]$ComponentsValue,
+        [Parameter(Mandatory)][string]$SubagentGuardMode
+    )
+    $componentSelection = $ComponentsValue
+    if (@($ComponentsValue) -contains 'all') {
+        $componentSelection = 'agents', 'skills', 'hooks'
+    }
+    if ($ActionValue -eq 'install') {
+        return ($SubagentGuardMode -eq 'Force') -or
+            (($SubagentGuardMode -eq 'Auto') -and (@($componentSelection) -contains 'agents'))
+    }
+    return (@($componentSelection) -contains 'agents') -or (@($componentSelection) -contains 'hooks')
+}
+
+# The model values are embedded into single-quoted PowerShell literals in
+# the installed guard script, so reject characters that would terminate the
+# literal or split it across lines, and reject placeholder-shaped values
+# that would look unfilled.
+function Confirm-ReviewerModelValue {
+    param(
+        [Parameter(Mandatory)][string]$FieldLabel,
+        [Parameter(Mandatory)][string]$Value
+    )
+    if ($Value.IndexOf("'") -ge 0 -or
+        $Value.IndexOf("`r") -ge 0 -or
+        $Value.IndexOf("`n") -ge 0 -or
+        $Value -match '^__.*__$') {
+        throw "The $FieldLabel value cannot contain a single quote, a carriage return, or a line feed, and cannot be a placeholder. Enter a model id or a distinctive part of a model name."
+    }
+}
+
+# Returns the four reviewer values the agents templates and the delegation
+# guard need, or four empty strings when neither is installed. Callers only
+# print or embed the values when they are present.
 function Get-ReviewerSettings {
     param(
         [Parameter(Mandatory)][bool]$InstallingAgents,
+        [Parameter(Mandatory)][bool]$GuardHookIncluded,
         [Parameter(Mandatory)][bool]$FromMenu
     )
-    if (-not $InstallingAgents) {
+    if (-not $InstallingAgents -and -not $GuardHookIncluded) {
         if (-not [string]::IsNullOrWhiteSpace($OwlModel) -or
             -not [string]::IsNullOrWhiteSpace($OwlReasoningEffort) -or
             -not [string]::IsNullOrWhiteSpace($CatModel) -or
             -not [string]::IsNullOrWhiteSpace($CatReasoningEffort)) {
-            throw '-OwlModel, -OwlReasoningEffort, -CatModel, and -CatReasoningEffort apply only when installing the agents component.'
+            throw '-OwlModel, -OwlReasoningEffort, -CatModel, and -CatReasoningEffort apply only when installing the agents component or the subagent delegation guard.'
         }
         return @{ OwlModel = ''; OwlEffort = ''; CatModel = ''; CatEffort = '' }
     }
-    if ($FromMenu) {
-        return @{ OwlModel = $OwlModel; OwlEffort = $OwlReasoningEffort; CatModel = $CatModel; CatEffort = $CatReasoningEffort }
-    }
-    foreach ($value in $OwlModel, $OwlReasoningEffort, $CatModel, $CatReasoningEffort) {
-        if ([string]::IsNullOrWhiteSpace($value)) {
-            throw 'A scripted install that includes the agents component requires -OwlModel, -OwlReasoningEffort, -CatModel, and -CatReasoningEffort. Run the script without flags for a guided menu.'
+    if (-not $FromMenu) {
+        foreach ($value in $OwlModel, $OwlReasoningEffort, $CatModel, $CatReasoningEffort) {
+            if ([string]::IsNullOrWhiteSpace($value)) {
+                throw 'A scripted install that includes the agents component or the subagent delegation guard requires -OwlModel, -OwlReasoningEffort, -CatModel, and -CatReasoningEffort. Run the script without flags for a guided menu.'
+            }
         }
     }
-    return @{
+    $settings = @{
         OwlModel = $OwlModel.Trim()
-        OwlEffort = $OwlReasoningEffort.Trim()
+        OwlEffort = $OwlReasoningEffort.Trim().ToLowerInvariant()
         CatModel = $CatModel.Trim()
-        CatEffort = $CatReasoningEffort.Trim()
+        CatEffort = $CatReasoningEffort.Trim().ToLowerInvariant()
     }
+    Confirm-ReviewerModelValue -FieldLabel 'Owl model' -Value $settings.OwlModel
+    Confirm-ReviewerModelValue -FieldLabel 'Cat model' -Value $settings.CatModel
+    return $settings
 }
 
 function Get-TargetFolders {
@@ -544,7 +633,8 @@ function Get-HookOperationOps {
         [Parameter(Mandatory)][string]$HookName,
         [Parameter(Mandatory)][hashtable]$Targets,
         [Parameter(Mandatory)][string]$TargetLevel,
-        [Parameter(Mandatory)][string]$ActionValue
+        [Parameter(Mandatory)][string]$ActionValue,
+        [Parameter(Mandatory)][hashtable]$ReviewerSettings
     )
     $hookJsonName = $HookName + '.json'
     $hookJsonSource = Join-Path (Join-Path $RepoRoot 'hooks') $hookJsonName
@@ -566,12 +656,25 @@ function Get-HookOperationOps {
     $scriptTargetRoot = Join-Path $Targets.Scripts $HookName
     foreach ($sourceFile in Get-SourceFiles -SourceFolder $scriptSourceRoot) {
         $relativePath = Get-RelativePathBelow -FullPath $sourceFile.FullName -BasePath $scriptSourceRoot
+        # Only the guard itself embeds the reviewer values. The battery beside
+        # it stays verbatim because it reads the constants from the script.
+        $rewrittenContent = $null
+        if ($ActionValue -eq 'install' -and
+            $HookName -eq $HookSubagentGuardName -and
+            $relativePath -eq ($HookName + '.ps1')) {
+            $rewrittenContent = ConvertTo-RewrittenTemplate -TemplatePath $sourceFile.FullName -Replacements @{
+                $OwlModelPlaceholder = $ReviewerSettings.OwlModel
+                $OwlEffortPlaceholder = $ReviewerSettings.OwlEffort
+                $CatModelPlaceholder = $ReviewerSettings.CatModel
+                $CatEffortPlaceholder = $ReviewerSettings.CatEffort
+            }
+        }
         $hookOps += @{
             Component = 'hooks'
             Source = $sourceFile.FullName
             Target = Join-Path $scriptTargetRoot $relativePath
             Display = Join-Path (Join-Path 'scripts' $HookName) $relativePath
-            RewrittenContent = $null
+            RewrittenContent = $rewrittenContent
         }
     }
     return @{ Ops = $hookOps; Folder = $scriptTargetRoot }
@@ -591,20 +694,7 @@ function Get-InstallOperationPlan {
         $componentSelection = $ComponentsValue
     }
 
-    # The subagent delegation hook travels with the agents on install (the
-    # agents component is the only one that collects reviewer model values),
-    # and Force also lets it travel where the agents component is not
-    # selected, for an install whose agents were copied by hand. An
-    # uninstall removes it whenever the components that could have installed
-    # it are removed, so uninstalling agents alone also cleans the guard.
-    $includeGuardHook = $false
-    if ($ActionValue -eq 'install') {
-        $includeGuardHook = ($SubagentGuardMode -eq 'Force') -or
-            (($SubagentGuardMode -eq 'Auto') -and ($componentSelection -contains 'agents'))
-    }
-    else {
-        $includeGuardHook = ($componentSelection -contains 'agents') -or ($componentSelection -contains 'hooks')
-    }
+    $includeGuardHook = Test-GuardHookIncluded -ActionValue $ActionValue -ComponentsValue $componentSelection -SubagentGuardMode $SubagentGuardMode
     $plannedHookNames = @($HookNames | Where-Object { $_ -ne $HookSubagentGuardName -or $includeGuardHook })
 
     # Only the selected components are planned, so a partial clone can install
@@ -647,7 +737,7 @@ function Get-InstallOperationPlan {
         }
         elseif ($component -eq 'hooks') {
             foreach ($hookName in $plannedHookNames) {
-                $hookPlan = Get-HookOperationOps -HookName $hookName -Targets $Targets -TargetLevel $TargetLevel -ActionValue $ActionValue
+                $hookPlan = Get-HookOperationOps -HookName $hookName -Targets $Targets -TargetLevel $TargetLevel -ActionValue $ActionValue -ReviewerSettings $ReviewerSettings
                 $fileOps += $hookPlan.Ops
                 $folderPrunes += @{ Component = 'hooks'; Folder = $hookPlan.Folder }
             }
@@ -659,7 +749,7 @@ function Get-InstallOperationPlan {
     # never executes, so the summary's claim stays true and those uninstalls
     # still remove the guard.
     if ($includeGuardHook -and (@($componentSelection) -notcontains 'hooks')) {
-        $guardPlan = Get-HookOperationOps -HookName $HookSubagentGuardName -Targets $Targets -TargetLevel $TargetLevel -ActionValue $ActionValue
+        $guardPlan = Get-HookOperationOps -HookName $HookSubagentGuardName -Targets $Targets -TargetLevel $TargetLevel -ActionValue $ActionValue -ReviewerSettings $ReviewerSettings
         $fileOps += $guardPlan.Ops
         $folderPrunes += @{ Component = 'hooks'; Folder = $guardPlan.Folder }
     }
@@ -820,10 +910,21 @@ try {
         $Components = $menuChoices.Components
         $Level = $menuChoices.Level
         $ProjectRoot = $menuChoices.ProjectPath
-        $OwlModel = $menuChoices.ReviewerSettings.OwlModel
-        $OwlReasoningEffort = $menuChoices.ReviewerSettings.OwlEffort
-        $CatModel = $menuChoices.ReviewerSettings.CatModel
-        $CatReasoningEffort = $menuChoices.ReviewerSettings.CatEffort
+        # The effort parameters carry ValidateSet attributes, which also cover
+        # assignments to their variables, so an empty menu effort stays
+        # unassigned.
+        if (-not [string]::IsNullOrWhiteSpace($menuChoices.ReviewerSettings.OwlModel)) {
+            $OwlModel = $menuChoices.ReviewerSettings.OwlModel
+        }
+        if (-not [string]::IsNullOrWhiteSpace($menuChoices.ReviewerSettings.OwlEffort)) {
+            $OwlReasoningEffort = $menuChoices.ReviewerSettings.OwlEffort
+        }
+        if (-not [string]::IsNullOrWhiteSpace($menuChoices.ReviewerSettings.CatModel)) {
+            $CatModel = $menuChoices.ReviewerSettings.CatModel
+        }
+        if (-not [string]::IsNullOrWhiteSpace($menuChoices.ReviewerSettings.CatEffort)) {
+            $CatReasoningEffort = $menuChoices.ReviewerSettings.CatEffort
+        }
         $SubagentGuard = $menuChoices.SubagentGuard
     }
 
@@ -842,14 +943,15 @@ try {
     if ($Action -eq 'install' -and $SubagentGuard -eq 'Force' -and -not ($installingAgents -or $installingHooks)) {
         throw '-SubagentGuard Force requires the agents or hooks component.'
     }
-    $reviewerSettings = Get-ReviewerSettings -InstallingAgents $installingAgents -FromMenu $useMenu
+    $guardInstallIncluded = ($Action -eq 'install') -and (Test-GuardHookIncluded -ActionValue $Action -ComponentsValue $selectedTokens -SubagentGuardMode $SubagentGuard)
+    $reviewerSettings = Get-ReviewerSettings -InstallingAgents $installingAgents -GuardHookIncluded $guardInstallIncluded -FromMenu $useMenu
     $plan = Get-InstallOperationPlan -ActionValue $Action -ComponentsValue $Components -Targets $targets -TargetLevel $Level -ReviewerSettings $reviewerSettings -SubagentGuardMode $SubagentGuard
 
     Write-Host "Copilot Squad $($Action.ToLowerInvariant())"
     Write-Host "Level: $Level"
     Write-Host "Components: $($Components -join ', ')"
     Write-Host "Target: $($targets.TargetRoot)"
-    if ($installingAgents) {
+    if ($installingAgents -or ($Action -eq 'install' -and $plan.GuardHookIncluded)) {
         Write-Host ('Owl model: {0} (effort: {1})' -f $reviewerSettings.OwlModel, $reviewerSettings.OwlEffort)
         Write-Host ('Cat model: {0} (effort: {1})' -f $reviewerSettings.CatModel, $reviewerSettings.CatEffort)
     }

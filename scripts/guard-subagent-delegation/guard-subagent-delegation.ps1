@@ -13,6 +13,12 @@
     or to surface the limitation to the user when its tool cannot set
     them.
 
+    Also denies a reasoning_effort that differs from the effort installed
+    for that reviewer, but only when the call's model contains the installed
+    reviewer model. A user-named model that does not contain the installed
+    model is allowed to use a different effort, because the configured
+    effort belongs to the configured model.
+
     Contract notes shared with the shell guard:
     - The hook file is configured with the PascalCase PreToolUse event, so
       the harness delivers the VS Code compatible payload (hook_event_name,
@@ -35,10 +41,17 @@
       timeout also fails open. The hook JSON therefore budgets 60 seconds,
       far above the read-and-parse work this script does, so a timeout
       stays a pathological event rather than a way to bypass enforcement.
-    - Enforcement is presence only: the delegation rule lets the caller
-      run a reviewer on a model the user names for that call instead of
-      the configured one, so any non-empty value satisfies the check and
-      values are never compared against the configured model.
+    - Enforcement is presence plus a conditional value check: every reviewer
+      call must carry non-empty model and reasoning_effort values. The effort
+      value must equal the installed value only when the model value contains
+      the installed reviewer model, compared as a case-insensitive substring.
+      The model values may be full ids or distinctive parts of the model
+      names, so containment matches the delegation rule's
+      first-available-match behavior. A model that does not contain the
+      installed value may carry any non-empty effort.
+    - The constants below are placeholders in the repo copy and are filled by
+      the installer. The script never reads configuration from outside itself.
+      An installed copy with a placeholder left in place is a broken install.
 
     Scope: only calls whose agent_type names a squad reviewer are judged.
     Calls to the entry point agents, the built-in agents, or any other
@@ -61,6 +74,18 @@ $ErrorActionPreference = 'SilentlyContinue'
 # implementer's work.
 $SubagentToolNames = @('Agent', 'Task', 'task')
 $GuardedAgentNames = @('Owl', 'Cat')
+$OwlModel = '__OWL_MODEL__'
+$CatModel = '__CAT_MODEL__'
+$OwlReasoningEffort = '__OWL_REASONING_EFFORT__'
+$CatReasoningEffort = '__CAT_REASONING_EFFORT__'
+$ExpectedModelByAgent = @{
+    'Owl' = $OwlModel
+    'Cat' = $CatModel
+}
+$ExpectedEffortByAgent = @{
+    'Owl' = $OwlReasoningEffort
+    'Cat' = $CatReasoningEffort
+}
 $RequiredFieldNamesByName = [ordered]@{
     'model'            = @('model')
     'reasoning_effort' = @('reasoning_effort', 'reasoningEffort')
@@ -134,6 +159,16 @@ if (-not $agentType) { Write-Allow }
 # are guarded the same as the exact names.
 if ($GuardedAgentNames -notcontains $agentType) { Write-Allow }
 
+$expectedModel = $ExpectedModelByAgent[$agentType]
+$expectedEffort = $ExpectedEffortByAgent[$agentType]
+# A placeholder means the installer never filled this copy. Deny loudly
+# instead of letting the containment check silently skip the effort check.
+if ($expectedModel -match '^__.*__$' -or $expectedEffort -match '^__.*__$') {
+    $reason = "The subagent call to $agentType was denied because the installed delegation guard is not " +
+        'configured for that reviewer. Re-run the installer or fill the guard script''s four reviewer constants.'
+    Write-Deny -Reason $reason
+}
+
 $missingFields = @()
 foreach ($requiredFieldName in $RequiredFieldNamesByName.Keys) {
     $candidateNames = @($RequiredFieldNamesByName[$requiredFieldName])
@@ -141,20 +176,36 @@ foreach ($requiredFieldName in $RequiredFieldNamesByName.Keys) {
         $missingFields += $requiredFieldName
     }
 }
-if ($missingFields.Count -eq 0) { Write-Allow }
+if ($missingFields.Count -gt 0) {
+    if ($missingFields.Count -eq 1) {
+        $fieldDescription = 'the {0} field' -f $missingFields[0]
+    }
+    else {
+        $fieldDescription = 'the {0} and {1} fields' -f $missingFields[0], $missingFields[1]
+    }
 
-if ($missingFields.Count -eq 1) {
-    $fieldDescription = 'the {0} field' -f $missingFields[0]
+    $reason = "The subagent call to $agentType was denied because it omits $fieldDescription that the " +
+        'delegation rule requires on every reviewer call. Retry the call with ' +
+        'model set to the first available match of the configured reviewer ' +
+        'model and reasoning_effort set to the configured effort. If the ' +
+        'calling tool cannot set both fields, surface the limitation to the ' +
+        'user instead of retrying without them or skipping the review.'
+
+    Write-Deny -Reason $reason
 }
-else {
-    $fieldDescription = 'the {0} and {1} fields' -f $missingFields[0], $missingFields[1]
+
+$model = Get-ToolInputValue -ToolInput $toolInput -Names $RequiredFieldNamesByName['model']
+$effort = Get-ToolInputValue -ToolInput $toolInput -Names $RequiredFieldNamesByName['reasoning_effort']
+
+# IndexOf treats wildcard characters literally, unlike -like, and the
+# comparison is case-insensitive like the reviewer-name check above.
+$modelContainsExpectedModel = $model.Trim().IndexOf($expectedModel, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+if ($modelContainsExpectedModel -and ($effort.Trim() -ne $expectedEffort)) {
+    $reason = "The subagent call to $agentType was denied because its reasoning_effort does not match " +
+        "the effort installed for the reviewer model '$expectedModel'. Retry the call with " +
+        "reasoning_effort set to '$expectedEffort'. If the calling tool cannot set that value, " +
+        'surface the limitation to the user instead of retrying with another value or skipping the review.'
+    Write-Deny -Reason $reason
 }
 
-$reason = "The subagent call to $agentType was denied because it omits $fieldDescription that the " +
-    'delegation rule requires on every reviewer call. Retry the call with ' +
-    'model set to the first available match of the configured reviewer ' +
-    'model and reasoning_effort set to the configured effort. If the ' +
-    'calling tool cannot set both fields, surface the limitation to the ' +
-    'user instead of retrying without them or skipping the review.'
-
-Write-Deny -Reason $reason
+Write-Allow
