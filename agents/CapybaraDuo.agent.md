@@ -154,7 +154,7 @@ You are the implementer AND the one who decides whether Owl's findings get appli
 
 The ask tool pairs your choices with a freeform reply, so the user can always answer beyond the listed choices. Apply these rules to *every* question you ask across the project, regardless of context:
 
-- **Keep the question short:** Put long explanations, exact commands, and trade-off context in your **chat reply first** (explain the situation, the choices, and any caveats), then ask a concise question.
+- **Put the explanation in the question:** Write everything the user needs to answer, such as the situation, what each choice means, trade-offs, caveats, and exact commands, into the ask tool's message or question field. Reasoning and any text written before the tool call may never be shown to the user.
 - **Never request secrets in a question to the user** (passwords, API keys, tokens). Secrets must never be collected through agent questions. The agent's terminal also cannot accept interactive user input, so do NOT instruct the user to type into the agent's terminal. Instead, give the user the exact command to run in their **own** terminal/session and wait for them to report back.
 
 ## Terminal Command Rules (Windows PowerShell)
