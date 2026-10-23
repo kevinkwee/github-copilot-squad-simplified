@@ -234,6 +234,7 @@ sequenceDiagram
 ### Owl (`Owl.agent.md`)
 
 - Reviews the code implementation for correctness, completeness, and quality.
+- Reads every applicable `AGENTS.md` in full before reviewing, unless it is already in context (see [Reviewers read `AGENTS.md` themselves](#reviewers-read-agentsmd-themselves)).
 - Reads the `implementation_{iteration}.md` summary **and** the actual changed files from disk.
 - Runs available tests for touched modules to detect regressions.
 - Classifies findings:
@@ -241,32 +242,39 @@ sequenceDiagram
   - **Minor** → suggestions only
 - Writes `review_{iteration}.md` to the report subfolder.
 - Not user-invocable; called only by Capybara.
-- `include-custom-instructions: true`, so the Copilot runtime attaches the project's `AGENTS.md` when it runs as a subagent.
 
 ### Cat (`Cat.agent.md`, Trio only)
 
 - Reviews **only** the comments and docstrings in the changed files (after Owl approves the implementation).
 - Does NOT review code logic, correctness, architecture, or tests; Owl owns that.
 - Applies its own general principles (cold-reader oriented; comments explain WHY, never WHAT) and follows the detailed comment/docstring rules in `AGENTS.md`.
+- Reads every applicable `AGENTS.md` in full before reviewing, unless it is already in context (see [Reviewers read `AGENTS.md` themselves](#reviewers-read-agentsmd-themselves)).
 - Reads all `implementation_*.md` reports Capybara hands it (at the Owl-to-Cat transition, all of `implementation_1.md`..`implementation_N.md`; on later re-reviews, only the new `implementation_*.md` since its last `docstring_review_*.md`) and writes a single `docstring_review_{iteration}.md` per call. The handed reports scope the review, not what Cat may read. Cat can read more from disk if it needs extra context.
 - Classifies findings:
   - **Critical** → blocks approval (`CHANGES REQUIRED`)
   - **Minor** → suggestions only
 - Writes `docstring_review_{iteration}.md` to the report subfolder.
 - Not user-invocable; called only by Capybara.
-- `include-custom-instructions: true`, so the Copilot runtime attaches the project's `AGENTS.md` when it runs as a subagent.
 
 ## Project code-writing rules (`AGENTS.md`)
 
-`Capybara`, `Owl`, and `Cat` all treat an attached `AGENTS.md` as the source of truth for the project's stack, idioms, and quality bar (test commands, lint/format, naming, architecture rules, and the expected comment/docstring rules). The detailed code-writing rules have been **stripped out** of the agent profiles and moved into a per-project `AGENTS.md` that you provide alongside the agents.
+`Capybara`, `Owl`, and `Cat` all treat the project's `AGENTS.md` as the source of truth for the stack, idioms, and quality bar (test commands, lint/format, naming, architecture rules, and the expected comment/docstring rules). The detailed code-writing rules have been **stripped out** of the agent profiles and moved into a per-project `AGENTS.md` that you provide alongside the agents.
 
-`Capybara` runs as the session agent, so the harness attaches `AGENTS.md` to it directly. `Owl` and `Cat` run as subagents, and the Copilot runtime withholds repository instruction files (`AGENTS.md`, `copilot-instructions.md`, `CLAUDE.md`) from a custom agent running as a subagent unless the agent opts in, so both set `include-custom-instructions: true` in their frontmatter. VS Code's agent file validator may flag that key as unsupported when you open the file, but the Copilot runtime reads it. Each review call then carries the project's rules, at the cost of the extra tokens.
+`Capybara` runs as the session agent, so the harness attaches `AGENTS.md` to it directly. `Owl` and `Cat` run as subagents, and the Copilot runtime withholds repository instruction files (`AGENTS.md`, `copilot-instructions.md`, `CLAUDE.md`) from a custom agent running as a subagent unless the agent opts in, so both set `include-custom-instructions: true` in their frontmatter. VS Code's agent file validator may flag that key as unsupported when you open the file, but the Copilot runtime reads it. Where the harness forwards the key, each review call then carries the project's rules, at the cost of the extra tokens. [Reviewers read `AGENTS.md` themselves](#reviewers-read-agentsmd-themselves) covers the harnesses that do not forward it.
 
 A separate `AGENTS.md` is **easier to update and maintain**, especially when it contains a section that is **managed by the agent itself** (the agent can read and edit `AGENTS.md` in place without you having to edit the bundled agent profile).
 
 **Blank projects**: when a project has no `AGENTS.md` at all, `Capybara` bootstraps one on the first implementation request. Until the file exists, the `agents-md` skill's bundled template rules are the baseline. The plan makes bootstrapping its first item, so approving the plan approves it, and declining it in the plan feedback skips it. The plan's execution starts there: the `agents-md` skill runs in create mode (see the [AGENTS.md skill](#agentsmd-skill)) and derives the file's content from the task's requirements instead of a separate interview. The new `AGENTS.md` then applies like a provided one, so the file is created at most once per project. A declined bootstrap becomes the plan's first item again on the next implementation request. Comment/docstring-only, commit, and PR requests never trigger it.
 
 > The template ships inside the `agents-md` skill below: fill the placeholder comments, delete the sections your project does not need, and adapt the language-specific examples to your stack. The skill automates this for you, both when creating a new file and when aligning an existing one.
+
+### Reviewers read `AGENTS.md` themselves
+
+The VS Code Agents window drops the `include-custom-instructions` key before it reaches the Copilot runtime ([microsoft/vscode#343696](https://github.com/microsoft/vscode/issues/343696)), so Owl and Cat run there without repository instructions and load `AGENTS.md` themselves:
+
+- Before reviewing, Owl and Cat read every applicable `AGENTS.md`: the repo-root file first, plus any nested `AGENTS.md` in a changed file's directory or one of its parents. A nested file applies only to the changed files inside its directory, and when two applicable files conflict, the one nearest to the changed file wins.
+- They skip a file only when its full text is already in their context, and they read each file in full, continuing past any file-reader truncation.
+- The `review_{iteration}.md` and `docstring_review_{iteration}.md` files each list the `AGENTS.md` paths the reviewer used, marking each as already in context or read from disk, or note that none applies.
 
 ## AGENTS.md skill
 
