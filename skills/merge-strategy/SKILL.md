@@ -2,6 +2,8 @@
 name: merge-strategy
 description: 'Decide the merge strategy for a pull request or local branch merge. Use when: asked to merge, a merge is about to happen, or the strategy choice is unclear. Load this skill before ANY merge, including one a built-in merge workflow skill performs. This skill owns the strategy rules. Not for sync flows that only bring a branch up to date with its upstream.'
 argument-hint: '[optional: strategy such as merge, squash, or rebase, or a PR number]'
+license: MIT
+compatibility: 'Requires git, plus the GitHub CLI (gh) for pull request merges.'
 ---
 
 # Merge Strategy

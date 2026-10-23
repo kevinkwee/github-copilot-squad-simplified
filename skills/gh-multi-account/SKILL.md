@@ -1,6 +1,8 @@
 ---
 name: gh-multi-account
 description: 'Run gh and gh-authenticated git commands as a specific logged-in GitHub account without changing the active account. Use when: a gh or git command must act as an account other than the currently active one, gh returns permission errors or wrong-account data on repositories another logged-in account owns, an agent is about to run gh auth switch, or any multi-account gh question comes up. Discover the logged-in accounts with gh auth status.'
+license: MIT
+compatibility: 'Requires the GitHub CLI (gh) logged in to the target account, git, and a PowerShell terminal.'
 ---
 
 # Multi-Account gh

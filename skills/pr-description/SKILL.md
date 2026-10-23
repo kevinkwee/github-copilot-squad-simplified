@@ -2,6 +2,8 @@
 name: pr-description
 description: 'Write a pull request title and description in Conventional Commits style, from the branch history. Use when: asked for a PR title or description, or a pull request is about to be created or updated. Load this skill before ANY pull request creation or update, including by a built-in PR workflow skill. This skill owns the title and description style.'
 argument-hint: '[optional: repo and branch, or a PR template]'
+license: MIT
+compatibility: 'Requires git, plus the GitHub CLI (gh) to create pull requests without a built-in PR skill.'
 ---
 
 # PR Title and Description

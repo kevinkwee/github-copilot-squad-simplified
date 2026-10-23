@@ -5,7 +5,8 @@
     flags, or through piped menu answers inside a disposable user profile, so
     the real $HOME\.copilot and any real project are never touched.
     Results are asserted on the resulting file tree, the rewritten hook JSON
-    and agent templates, exit codes, and the reported summary lines.
+    and agent templates, the installed agent and skill frontmatter, exit
+    codes, and the reported summary lines.
 
     Must run under pwsh 7 like the guard battery; case 15 additionally covers
     Windows PowerShell 5.1 by launching powershell.exe when it exists.
@@ -149,6 +150,44 @@ function Get-InstalledFileCount {
         return 0
     }
     return @(Get-ChildItem -LiteralPath $Root -Recurse -File).Count
+}
+
+# Returns a prompt file's top-level frontmatter: the key names in file order
+# with their casing and any duplicates kept, so a key-set check catches both,
+# plus maps of the raw and the unquoted scalar values. The raw map lets a case
+# tell a YAML boolean from a quoted string. All are empty when the file lacks
+# a fenced frontmatter block. Nested YAML is out of scope because the squad
+# files use none.
+function Get-Frontmatter {
+    param([string]$Text)
+    $frontmatter = [pscustomobject]@{ KeyNames = @(); RawValues = [ordered]@{}; Values = [ordered]@{} }
+    $lines = $Text -split "`r?`n"
+    $closingFenceIndex = [array]::IndexOf($lines, '---', 1)
+    if ($lines[0] -ne '---' -or $closingFenceIndex -lt 0) {
+        return $frontmatter
+    }
+    foreach ($line in $lines[1..$closingFenceIndex]) {
+        if ($line -notmatch '^([A-Za-z][\w-]*):\s*(.*)$') {
+            continue
+        }
+        $rawValue = $Matches[2].Trim()
+        $value = $rawValue
+        if ($value.Length -ge 2 -and $value.StartsWith("'") -and $value.EndsWith("'")) {
+            $value = $value.Substring(1, $value.Length - 2).Replace("''", "'")
+        }
+        elseif ($value.Length -ge 2 -and $value.StartsWith('"') -and $value.EndsWith('"')) {
+            $value = $value.Substring(1, $value.Length - 2)
+        }
+        $frontmatter.KeyNames += $Matches[1]
+        $frontmatter.RawValues[$Matches[1]] = $rawValue
+        $frontmatter.Values[$Matches[1]] = $value
+    }
+    return $frontmatter
+}
+
+function Get-SortedKeyList {
+    param([string[]]$KeyNames)
+    return (@($KeyNames) | Sort-Object) -join ', '
 }
 
 try {
@@ -729,6 +768,71 @@ try {
     $menuQuotedModelRun = Invoke-PipedMenuRun -Answers @('1', '1', '2', $menuQuotedModelRoot, "o'brien", '5', 'menu/cat-5.3', '3', '1')
     Add-Result -Condition ($menuQuotedModelRun.ExitCode -eq 1 -and (ConvertTo-ComparableOutput $menuQuotedModelRun.Output).Contains('cannot contain a single quote')) -CaseName 'menu model with a single quote is rejected' -FailMessage $menuQuotedModelRun.Output
     Add-Result -Condition ((Get-InstalledFileCount -Root $menuQuotedModelRoot) -eq 0) -CaseName 'menu model with a single quote writes nothing' -FailMessage 'files were created'
+
+    # Case 58: installed agent frontmatter carries exactly the contract keys,
+    # compared case-sensitively because YAML keys are. Only the reviewers opt
+    # into repository instructions, because the Copilot runtime withholds
+    # AGENTS.md from a custom agent running as a subagent. Reuses case 1's
+    # user-level install.
+    $sessionAgentKeys = @('name', 'description', 'user-invocable', 'disable-model-invocation')
+    $reviewerAgentKeys = $sessionAgentKeys + 'include-custom-instructions'
+    $expectedAgentKeys = [ordered]@{
+        'Capybara.agent.md' = $sessionAgentKeys
+        'CapybaraDuo.agent.md' = $sessionAgentKeys
+        'Owl.agent.md' = $reviewerAgentKeys
+        'Cat.agent.md' = $reviewerAgentKeys
+    }
+    $agentFrontmatterByFile = [ordered]@{}
+    foreach ($agentFileName in $expectedAgentKeys.Keys) {
+        $agentFrontmatter = Get-Frontmatter -Text (Get-Content -LiteralPath (Join-Path $userRoot "agents/$agentFileName") -Raw)
+        $agentFrontmatterByFile[$agentFileName] = $agentFrontmatter
+        $actualKeyList = Get-SortedKeyList -KeyNames $agentFrontmatter.KeyNames
+        $expectedKeyList = Get-SortedKeyList -KeyNames $expectedAgentKeys[$agentFileName]
+        Add-Result -Condition ($actualKeyList -ceq $expectedKeyList) -CaseName "$agentFileName frontmatter keys match the contract" -FailMessage "found: $actualKeyList"
+    }
+    foreach ($agentFileName in $expectedAgentKeys.Keys) {
+        if ($expectedAgentKeys[$agentFileName] -cnotcontains 'include-custom-instructions') {
+            continue
+        }
+        # A quoted 'true' is a YAML string, which the runtime does not read
+        # as the boolean opt-in.
+        $optInRawValue = $agentFrontmatterByFile[$agentFileName].RawValues['include-custom-instructions']
+        Add-Result -Condition ($optInRawValue -ceq 'true') -CaseName "$agentFileName opts into repository instructions" -FailMessage "include-custom-instructions is '$optInRawValue'"
+    }
+
+    # Case 59: installed skill frontmatter carries exactly the contract keys,
+    # declares the MIT license, and every skill that shells out to git or gh
+    # names each tool it needs in a single-quoted compatibility value within
+    # the Agent Skills limit of 500 characters. Reuses case 1's user-level
+    # install.
+    $compatibilityMaxLength = 500
+    $baseSkillKeys = @('name', 'description', 'license')
+    $expectedSkills = [ordered]@{
+        'agents-md' = @{ KeyNames = $baseSkillKeys + 'argument-hint'; Tools = @() }
+        'commit-message' = @{ KeyNames = $baseSkillKeys + @('argument-hint', 'compatibility'); Tools = @('git') }
+        'gh-multi-account' = @{ KeyNames = $baseSkillKeys + 'compatibility'; Tools = @('git', 'gh') }
+        'merge-strategy' = @{ KeyNames = $baseSkillKeys + @('argument-hint', 'compatibility'); Tools = @('git', 'gh') }
+        'pr-description' = @{ KeyNames = $baseSkillKeys + @('argument-hint', 'compatibility'); Tools = @('git', 'gh') }
+    }
+    foreach ($skillFolder in $expectedSkills.Keys) {
+        $expectedSkill = $expectedSkills[$skillFolder]
+        $skillFrontmatter = Get-Frontmatter -Text (Get-Content -LiteralPath (Join-Path $userRoot "skills/$skillFolder/SKILL.md") -Raw)
+        $actualKeyList = Get-SortedKeyList -KeyNames $skillFrontmatter.KeyNames
+        $expectedKeyList = Get-SortedKeyList -KeyNames $expectedSkill.KeyNames
+        Add-Result -Condition ($actualKeyList -ceq $expectedKeyList) -CaseName "$skillFolder skill frontmatter keys match the contract" -FailMessage "found: $actualKeyList"
+        $license = $skillFrontmatter.Values['license']
+        Add-Result -Condition ($license -ceq 'MIT') -CaseName "$skillFolder skill declares the MIT license" -FailMessage "license is '$license'"
+        $compatibility = [string]$skillFrontmatter.Values['compatibility']
+        if ($expectedSkill.Tools.Count -eq 0) {
+            Add-Result -Condition ($compatibility -eq '') -CaseName "$skillFolder skill declares no compatibility" -FailMessage "compatibility is '$compatibility'"
+            continue
+        }
+        $unnamedTools = @($expectedSkill.Tools | Where-Object { $compatibility -notmatch "\b$_\b" })
+        $compatibilityOk = $unnamedTools.Count -eq 0 -and $compatibility.Length -le $compatibilityMaxLength
+        Add-Result -Condition $compatibilityOk -CaseName "$skillFolder skill names its required tools in compatibility" -FailMessage "compatibility is '$compatibility'"
+        $rawCompatibility = [string]$skillFrontmatter.RawValues['compatibility']
+        Add-Result -Condition ($rawCompatibility -cmatch '^''.*''$') -CaseName "$skillFolder skill single-quotes its compatibility" -FailMessage "compatibility is written as $rawCompatibility"
+    }
 }
 finally {
     foreach ($tempRoot in $script:tempRoots) {

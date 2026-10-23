@@ -2,6 +2,7 @@
 name: agents-md
 description: 'Create a project AGENTS.md from the bundled template, or adapt an existing AGENTS.md to align with it. Use when: setting up a new project, bootstrapping agent guidance where no AGENTS.md exists, or auditing and updating an existing AGENTS.md against the template rules.'
 argument-hint: '[create | adapt] [existing AGENTS.md path, optional]'
+license: MIT
 ---
 
 # AGENTS.md Create and Adapt

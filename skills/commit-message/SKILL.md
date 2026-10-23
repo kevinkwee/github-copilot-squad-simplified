@@ -2,6 +2,8 @@
 name: commit-message
 description: 'Write a Conventional Commits message for the staged changes, and optionally commit them. Use when: asked for a commit message, documenting staged work, or a commit is about to happen. Load this skill before ANY commit, including one a built-in commit workflow skill performs. This skill owns the message style rules.'
 argument-hint: '[optional: context such as an issue number]'
+license: MIT
+compatibility: 'Requires git. Direct commits assume a Windows PowerShell terminal.'
 ---
 
 # Commit Message

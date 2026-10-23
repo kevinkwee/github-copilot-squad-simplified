@@ -70,6 +70,7 @@ The squad avoids naming tools so it does not break when the underlying Copilot S
 - Agent frontmatter pins no `tools:` list, so every agent inherits the harness default tool set.
 - Instructions reference capabilities only: ask the user, create a todo list, run tests in a terminal, delegate to a reviewer as a subagent and wait for its verdict.
 - Constraints such as "you MUST NOT call yourself as a subagent" live in the instructions, so they hold on every harness.
+- Frontmatter beyond the basic keys targets the harnesses that read it. Harnesses that do not read a key ignore it, though VS Code's agent file validator may show a warning. Owl and Cat set `include-custom-instructions: true`, which the Copilot runtime reads (see [Project code-writing rules](#project-code-writing-rules-agentsmd)). Every skill sets `license: MIT`, and the skills that shell out to git or gh add a `compatibility` line naming those tools. Both skill keys come from the [Agent Skills specification](https://agentskills.io/specification).
 
 If a harness lacks a capability the squad depends on, such as asking the user, running commands, or delegating subagents, the agents surface that instead of silently degrading.
 
@@ -240,6 +241,7 @@ sequenceDiagram
   - **Minor** → suggestions only
 - Writes `review_{iteration}.md` to the report subfolder.
 - Not user-invocable; called only by Capybara.
+- `include-custom-instructions: true`, so the Copilot runtime attaches the project's `AGENTS.md` when it runs as a subagent.
 
 ### Cat (`Cat.agent.md`, Trio only)
 
@@ -252,10 +254,13 @@ sequenceDiagram
   - **Minor** → suggestions only
 - Writes `docstring_review_{iteration}.md` to the report subfolder.
 - Not user-invocable; called only by Capybara.
+- `include-custom-instructions: true`, so the Copilot runtime attaches the project's `AGENTS.md` when it runs as a subagent.
 
 ## Project code-writing rules (`AGENTS.md`)
 
 `Capybara`, `Owl`, and `Cat` all treat an attached `AGENTS.md` as the source of truth for the project's stack, idioms, and quality bar (test commands, lint/format, naming, architecture rules, and the expected comment/docstring rules). The detailed code-writing rules have been **stripped out** of the agent profiles and moved into a per-project `AGENTS.md` that you provide alongside the agents.
+
+`Capybara` runs as the session agent, so the harness attaches `AGENTS.md` to it directly. `Owl` and `Cat` run as subagents, and the Copilot runtime withholds repository instruction files (`AGENTS.md`, `copilot-instructions.md`, `CLAUDE.md`) from a custom agent running as a subagent unless the agent opts in, so both set `include-custom-instructions: true` in their frontmatter. VS Code's agent file validator may flag that key as unsupported when you open the file, but the Copilot runtime reads it. Each review call then carries the project's rules, at the cost of the extra tokens.
 
 A separate `AGENTS.md` is **easier to update and maintain**, especially when it contains a section that is **managed by the agent itself** (the agent can read and edit `AGENTS.md` in place without you having to edit the bundled agent profile).
 
@@ -540,6 +545,8 @@ Common tweaks you can make:
 - <https://code.visualstudio.com/docs/agents/run/subagents>
 - <https://code.visualstudio.com/docs/agents/run/tools>
 - <https://docs.github.com/en/copilot/reference/hooks-reference>
+- <https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference#custom-agents-reference>
+- <https://agentskills.io/specification>
 
 ## License
 
