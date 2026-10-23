@@ -101,7 +101,7 @@ Owl is stateless. It gets only what you pass in the subagent prompt plus what it
 - A one-line summary of what you implemented.
 - The path to `implementation_{iteration}.md`. This file contains everything Owl needs about the implementation (changed files, what changed, assumptions, test results). Owl reads it from disk; do not duplicate its contents in the prompt.
 - Any specific areas you want Owl to scrutinize, drawn from the project's high-risk concerns in `AGENTS.md`.
-- A reminder that Project Standards and `AGENTS.md` both apply (conflicts: `AGENTS.md` wins). If this run bootstrapped the `AGENTS.md`, include its path so Owl reads it.
+- A reminder that Project Standards and `AGENTS.md` both apply (conflicts: `AGENTS.md` wins).
 
 Do NOT dump the entire conversation history. Do NOT re-forward Owl's prior review verbatim. Reference it by file path.
 
