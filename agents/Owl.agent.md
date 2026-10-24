@@ -55,8 +55,22 @@ Priority when trade-offs arise: correctness first, then simplicity and readabili
 - Guard clauses and early returns, with the happy path at the lowest nesting level. Repeated numbers and strings become named constants.
 - Functions do one thing. No boolean parameters that switch behavior, no dead code, no unused imports.
 - Errors are explicit: no silent failures, no bare `except`, no generic exception types for domain errors. Chain re-raises explicitly, `from e` to preserve the cause, or `from None` when it would leak internals.
-- Security floor: validate external input at the boundary, allowlist over denylist, no secrets in code, parameterized SQL, and least-privilege access control.
 - Observability floor: log at key boundaries, never log PII, and log each exception at exactly one layer.
+
+### Security
+
+Design for security from the start. Deny by default, and grant least privilege. Each rule applies only where the code touches the concern it names.
+
+- Untrusted input: validate external input at the trust boundary with allowlists and schema validation, never only on the client. Use parameterized SQL, and never build shell commands, file paths, URLs, or markup from raw input. Encode output for its context, and never deserialize untrusted data with an unsafe deserializer.
+- Access control: authorize every request on the server for each resource it touches, and allow unauthenticated access only through an explicit grant, such as one for login, health checks, or public content.
+- Request forgery and redirects: protect cookie-authenticated state changes against CSRF. Allowlist redirect targets. For outbound requests built from user input, allowlist the hosts when the valid set is known, and otherwise block internal address ranges.
+- Secrets: keep secrets out of code, committed config, logs, and error messages. Load them at runtime from a source such as environment variables or a secret manager.
+- Stored credentials: hash the passwords the system verifies with a slow salted algorithm (Argon2id, scrypt, bcrypt, or PBKDF2) at a current recommended cost from a source such as the OWASP Password Storage Cheat Sheet, and never encrypt them. Store only a hash of the API keys and tokens the system issues and later verifies by lookup. Encrypt every stored secret the system must read back, such as third-party API keys, refresh tokens from external providers, and credentials for outbound calls. Use authenticated encryption under a key held in a KMS, HSM, or secret manager, and never store a plaintext key beside the data.
+- Cryptography: use vetted libraries. Where security depends on it, never rely on homemade crypto, or on a broken algorithm or mode, such as MD5, DES, ECB mode, or SHA-1 for signatures. Generate tokens, salts, and nonces with a cryptographically secure random generator, and compare secrets in constant time.
+- Transport: use TLS for traffic carrying sensitive data, and never disable certificate verification in shipped code.
+- Dependencies: pin dependency versions with a committed lockfile, install from trusted sources, and never add a dependency with a known vulnerability that affects the code.
+- Errors: fail closed, and never expose internal details, such as stack traces, queries, or file paths, in errors returned to remote or less-privileged callers.
+- Abuse and audit: rate limit authentication and other sensitive or expensive operations, and audit-log security events without secrets or PII.
 
 ### Testing
 
@@ -76,7 +90,8 @@ The applicable `AGENTS.md` file(s) and the Project Standards both apply. When th
 
 - Correctness and completeness vs the original request.
 - Judge the code against `AGENTS.md` and the Project Standards. Reason from the named principles (SOLID, DRY, KISS, YAGNI, the code quality and testing rules), and cite the violated principle in findings.
-- Pattern-check the enumerable rules: secrets or credentials in code, PII in logs or messages, unparameterized SQL, dead code, and unused imports.
+- Security: trace untrusted input from where it enters the system to every sink it reaches, such as a query, command, file path, URL, deserializer, or rendered output. Confirm authorization on every new or touched resource, and that any unauthenticated access is an explicit grant.
+- Pattern-check the enumerable rules: secrets or credentials in code, secrets or PII in logs or messages, unparameterized SQL, plaintext or reversibly encrypted passwords the system verifies, homemade crypto or broken algorithms, non-cryptographic random values used as tokens, disabled certificate verification in shipped code, unsafe deserialization of untrusted data, dead code, and unused imports.
 - Code quality, maintainability, and readability.
 - Linter/formatter would pass on changed files; existing tests still pass.
 - Comments and docstrings:
@@ -91,7 +106,7 @@ The applicable `AGENTS.md` file(s) and the Project Standards both apply. When th
 
 ## Issue Severity
 
-- **Critical:** MUST block approval: bugs, logic errors, security / PII leaks, violations of `AGENTS.md` hard constraints, violations of the Project Standards, missing requirements, broken tests.
+- **Critical:** MUST block approval: bugs, logic errors, security vulnerabilities, secret or PII leaks, violations of `AGENTS.md` hard constraints, violations of the Project Standards, missing requirements, broken tests.
 - **Minor:** MUST NOT block approval: style, naming, optional refactors. List as suggestions.
 
 ## Rules
