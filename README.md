@@ -79,6 +79,7 @@ If a harness lacks a capability the squad depends on, such as asking the user, r
 ### Prerequisites
 
 - VS Code with Copilot custom agents support (Agents window or Chat view)
+- git on `PATH` lets the installer keep the agents' reports out of commits (see [Report artifacts](#report-artifacts)). Without git, the installer skips that step with a warning and installs everything else. The installer's test battery needs git 2.32 or newer.
 
 ### Scripted install (install.ps1)
 
@@ -88,7 +89,7 @@ From a clone of this repo, run without arguments to get the interactive menu:
 pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1
 ```
 
-The menu asks whether to install or uninstall, which components to include (one or more of `agents`, `skills`, and `hooks`, for example by entering `2,3`, or `all` for everything), and whether to install at the user level (`~/.copilot/`) or the repo level (a project's `.github/` folder). It shows the plan and a confirmation before touching anything. Installs overwrite conflicting files by name; uninstalls remove only the squad's own files and list anything else matching a squad name (such as `.disabled` renames) for manual review.
+The menu asks whether to install or uninstall, which components to include (one or more of `agents`, `skills`, and `hooks`, for example by entering `2,3`, or `all` for everything), and whether to install at the user level (`~/.copilot/`) or the repo level (a project's `.github/` folder). Installs that include the agents also ask whether to add the reports entry to your global git excludes file (default yes, see [Report artifacts](#report-artifacts)). It shows the plan and a confirmation before touching anything. Installs overwrite conflicting files by name; uninstalls remove only the squad's own files and list anything else matching a squad name (such as `.disabled` renames) for manual review.
 
 For scripted use, flags replace the menu:
 
@@ -99,11 +100,12 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Action install -Compo
 - `-Components` picks the parts: one or more of `agents`, `skills`, and `hooks` (comma separated, for example `-Components agents,skills`), or `all` for everything, which cannot be combined with named components. Each hook's JSON and its companion script install together, and each JSON's placeholder script path is rewritten for the chosen level, so no manual path edit remains. An agents install carries the subagent delegation hook too, per `-SubagentGuard` below. The agents component rewrites the per-subagent model and effort placeholders inside the installed `Capybara` and `Capybara Duo` files, and the delegation guard rewrites the same four values into its installed script.
 - `-OwlModel <id or name part>`, `-OwlReasoningEffort <effort>`, `-CatModel <id or name part>`, and `-CatReasoningEffort <effort>` supply the per-subagent values the installer writes into those placeholders and into the delegation guard. Effort values must be one of `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`, accepted without regard to case and stored in lowercase. Model values cannot contain a single quote or a newline, because the guard script embeds them in a single-quoted PowerShell literal that must stay on one line, and cannot be a placeholder. Scripted installs that include the `agents` component or the subagent delegation guard on the install action require all four, and they fail fast for any other run. Interactive runs are asked for the same four values (see the Subagent model note).
 - `-SubagentGuard Auto|Skip|Force` (default `Auto`) controls the subagent delegation guard hook. The guard denies a reviewer subagent call that omits `model` or `reasoning_effort`, and it denies an effort that differs from the installed reviewer effort when the call's model contains the installed reviewer model (see the Hooks section). `Auto` installs it whenever the agents component is installed, `Skip` leaves it out and fails fast on any install that does not include the agents component, and `Force` installs it into any install that includes the agents or hooks component, for example a hooks-only install for a hand-maintained agents folder (runs selecting neither fail fast). A hooks-only guard install still requires the four reviewer values, because the guard embeds them. Only install runs accept a non-`Auto` value.
+- `-TempReportsExclude Auto|Skip` (default `Auto`) controls the reports entry in your global git excludes file (see [Report artifacts](#report-artifacts)). `Auto` adds it on installs that include the agents component, at either level, and removes the installer's entry on uninstalls that include it. `Skip` leaves the excludes file untouched, and fails fast on any run that does not include the agents component.
 - `-Level user` (default) writes under `%USERPROFILE%\.copilot\`. `-Level repo` writes under the project's `.github\` folder and requires `-ProjectRoot <path>`.
 - `-UserRoot <path>` overrides the user-level target root for one run, mainly for previews into a scratch folder; repo-level runs do not accept it.
 - `-Action uninstall` uses the same component and level choices to remove the squad's files. Add `-WhatIf` to either action for a dry run that only prints the plan.
 
-The installer's test battery verifies the whole script against disposable temp folders; run it from the repo root with `pwsh -NoProfile -File test-install.ps1`.
+The installer's test battery verifies the whole script against disposable temp folders, with git's global config and excludes file redirected into the same kind of sandbox. Run it from the repo root with `pwsh -NoProfile -File test-install.ps1`.
 
 ### Option A: Repo-level agents (recommended)
 
@@ -517,7 +519,7 @@ Skill discovery is best effort. VS Code does not guarantee a skill invocation fo
   - Technical request example: "Add endpoint X with validation and tests."
   - Non-technical request example: "Explain this repository architecture."
 - `Capybara` handles it directly. For technical tasks, Trio runs the Owl loop then the Cat loop; Duo runs only the Owl loop.
-- Reports are generated under `.github/temp_reports/` per iteration.
+- Reports are generated under `.github/temp_reports/` per iteration. The installer keeps them out of commits through your global git excludes file (see [Report artifacts](#report-artifacts)).
 
 ## Report artifacts
 
@@ -532,6 +534,22 @@ inside:
 - `.github/temp_reports/{timestamp_objective}/`
 
 This creates a lightweight audit trail of what was implemented and what was reviewed.
+
+### Keeping reports out of commits
+
+The reports are local working files, but a project `.gitignore` rule would reach every contributor, including the ones who never use the squad. The installer therefore adds the entry to your **global git excludes file**, which only your machine reads:
+
+- **Which file**: the file your global git config's `core.excludesFile` names, including a value set in a file the global config includes. When it is unset, git reads `%XDG_CONFIG_HOME%\git\ignore`, or `.config\git\ignore` in git's home folder (normally `%USERPROFILE%`) when `XDG_CONFIG_HOME` is unset too. The installer asks git for that path, creates the file when missing, and never changes your git config. A `core.excludesFile` set only in the system config is not consulted.
+- **What it adds**: a marker comment and `**/.github/temp_reports/`, which ignores the reports at a repository root and in nested project folders, in every repository and worktree on the machine. When the file already holds `**/.github/temp_reports/` (or the same without the trailing slash) without the marker, the installer adds nothing. A root-anchored line such as `.github/temp_reports/` covers only repository roots, so the installer still adds its entry next to it.
+- **When it skips**: the installer warns, skips the entry, and installs everything else when git is not on `PATH`, when git cannot read its config or resolve its home folder, when `core.excludesFile` is empty (git then reads no global excludes file) or a relative path (git resolves it against each repository), or when the excludes path is a folder or a read-only file that would need a write.
+- **When it applies**: any install that includes the agents component, at either level, unless you pass `-TempReportsExclude Skip` or answer no in the menu. Skills-only and hooks-only installs leave the file alone.
+- **Uninstall**: an uninstall that includes the agents removes only the marked pair, so your own lines stay. The entry is shared by every install level, so uninstalling the agents at one level removes it for all of them. Pass `-TempReportsExclude Skip` to that uninstall to keep it, or re-run the install to restore it.
+
+Ignoring the folder does not untrack reports that were committed before. Remove them from the index once in that repository, then commit:
+
+```powershell
+git rm -r --cached .github/temp_reports
+```
 
 ## Customization
 
