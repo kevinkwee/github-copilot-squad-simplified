@@ -42,6 +42,19 @@
     none, minimal, low, medium, high, xhigh, and max, accepted without
     regard to case and stored in lowercase.
 
+    Runs that select the agents component also manage one entry in the
+    user's global git excludes file: the file the global core.excludesFile
+    names, or git's default ignore file under XDG_CONFIG_HOME or the git
+    home folder's .config folder. The agents write their review reports
+    under .github/temp_reports/, and a global exclude keeps those reports
+    out of every repository's commits without a shared .gitignore rule that
+    would reach contributors who do not use the squad. Install appends the
+    entry below a marker comment unless the same pattern is already
+    present, and uninstall removes only that marked pair. When git is not on
+    PATH, or the excludes file cannot be resolved, is a folder, or is a
+    read-only file that would need a write, the entry is skipped with a
+    warning and the rest of the run proceeds.
+
 .PARAMETER Action
     install (default) or uninstall.
 
@@ -104,6 +117,13 @@
     even when the agents component is not selected. Only install runs accept
     a non-Auto value.
 
+.PARAMETER TempReportsExclude
+    How the temp reports entry in the global git excludes file is handled.
+    Auto (default) adds the entry on installs that select the agents
+    component and removes the installer's marked entry on uninstalls that
+    select it. Skip leaves the excludes file untouched, and fails fast on
+    any run that does not select the agents component.
+
 .EXAMPLE
     pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1
 
@@ -115,6 +135,9 @@
 
 .EXAMPLE
     pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Action install -Components hooks -Level user -SubagentGuard Force -OwlModel 'GLM-5.3' -OwlReasoningEffort high -CatModel 'flash' -CatReasoningEffort low
+
+.EXAMPLE
+    pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Action install -Components agents -Level user -TempReportsExclude Skip -OwlModel 'GLM-5.3' -OwlReasoningEffort high -CatModel 'flash' -CatReasoningEffort low
 
 .EXAMPLE
     pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Action uninstall -Level user
@@ -147,7 +170,10 @@ param(
     [string]$CatReasoningEffort,
 
     [ValidateSet('Auto', 'Skip', 'Force')]
-    [string]$SubagentGuard = 'Auto'
+    [string]$SubagentGuard = 'Auto',
+
+    [ValidateSet('Auto', 'Skip')]
+    [string]$TempReportsExclude = 'Auto'
 )
 
 Set-StrictMode -Version 2.0
@@ -172,6 +198,9 @@ $AgentFilesWithPlaceholders = 'Capybara.agent.md', $CapybaraDuoFile
 $ReasoningEffortValues = @('none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max')
 $DefaultOwlReasoningEffort = 'high'
 $DefaultCatReasoningEffort = 'low'
+$TempReportsExcludePattern = '**/.github/temp_reports/'
+$TempReportsExcludeMarker = '# Copilot Squad agent reports (managed by the squad install.ps1)'
+$TempReportsEquivalentPatternRegex = '^\*\*/\.github/temp_reports/?$'
 $LeftoverPattern = '^(CapybaraDuo|Capybara|Cat|Owl|guard-pwsh-continuation|guard-subagent-delegation|agents-md|commit-message|gh-multi-account|merge-strategy|pr-description)([._\- ]|$)'
 
 function Read-MenuChoiceIndex {
@@ -262,6 +291,23 @@ function Read-ReviewerSettings {
     return $settings
 }
 
+function Read-TempReportsExcludeChoice {
+    $excludesFile = Get-GitGlobalExcludesFile
+    # Without a resolvable excludes file there is nothing to consent to, and
+    # planning warns with the reason.
+    if ($excludesFile.SkipReason) {
+        return 'Auto'
+    }
+    $prompt = 'Add {0} to your global git excludes file ({1}) so the agents'' review reports stay out of commits?' -f $TempReportsExcludePattern, $excludesFile.Path
+    $choiceIndex = Read-MenuChoiceIndex $prompt @(
+        'yes, add the entry (default)',
+        'no, leave the git excludes file alone') 0
+    if ($choiceIndex -eq 1) {
+        return 'Skip'
+    }
+    return 'Auto'
+}
+
 function Read-ComponentMenu {
     $optionLabels = @(
         'all (agents, skills, and hooks)',
@@ -339,10 +385,12 @@ function Show-Menu {
 
     $reviewerSettings = @{ OwlModel = ''; OwlEffort = ''; CatModel = ''; CatEffort = '' }
     $subagentGuard = 'Auto'
+    $tempReportsExclude = 'Auto'
     if ($actionValues[$actionIndex] -eq 'install') {
         $selectedTokens = @($componentSelection)
         if (($selectedTokens -contains 'agents') -or ($selectedTokens -contains 'all')) {
             $reviewerSettings = Read-ReviewerSettings
+            $tempReportsExclude = Read-TempReportsExcludeChoice
         }
         elseif ($selectedTokens -contains 'hooks') {
             $guardIndex = Read-MenuChoiceIndex 'Include the subagent delegation guard hook with the shell guard?' @(
@@ -362,6 +410,7 @@ function Show-Menu {
         ProjectPath = $projectPath
         ReviewerSettings = $reviewerSettings
         SubagentGuard = $subagentGuard
+        TempReportsExclude = $tempReportsExclude
     }
 }
 
@@ -902,6 +951,212 @@ function Invoke-UninstallPlan {
     return @{ Removed = $removedCount; Absent = $absentCount; Leftovers = $leftovers }
 }
 
+# Runs a git query and returns its exit code and first output line. Output is
+# decoded as UTF-8, which git writes, because PowerShell decodes native output
+# with the console code page and would garble a non-ASCII path such as a
+# profile folder name. Stderr is left to the console, so git's own message
+# accompanies the installer's warning. The callers pass fixed tokens without
+# spaces or quotes, so joining them needs no quoting.
+function Invoke-GitQuery {
+    param(
+        [Parameter(Mandatory)][string]$GitPath,
+        [Parameter(Mandatory)][string[]]$Arguments
+    )
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $GitPath
+    $startInfo.Arguments = $Arguments -join ' '
+    $startInfo.UseShellExecute = $false
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.StandardOutputEncoding = New-Object System.Text.UTF8Encoding $false
+    $process = [System.Diagnostics.Process]::Start($startInfo)
+    try {
+        $standardOutput = $process.StandardOutput.ReadToEnd()
+        $process.WaitForExit()
+        return @{ ExitCode = $process.ExitCode; FirstLine = ($standardOutput -split "`r?`n")[0] }
+    }
+    finally {
+        $process.Dispose()
+    }
+}
+
+# Returns the global excludes file git reads as @{ Path; SkipReason }, with
+# exactly one of the two set, so callers skip instead of writing a file git
+# would never read. Only the global scope is consulted, so a core.excludesFile
+# set solely in system config is not seen.
+function Get-GitGlobalExcludesFile {
+    $gitCommand = Get-Command -Name git -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -eq $gitCommand) {
+        return @{ Path = ''; SkipReason = 'git was not found on PATH' }
+    }
+    # A scoped read skips include.path files unless asked, and dotfile setups
+    # often keep core.excludesFile in an included file.
+    $configuredQuery = Invoke-GitQuery -GitPath $gitCommand.Path -Arguments @('config', '--global', '--includes', '--type=path', '--get', 'core.excludesFile')
+    if ($configuredQuery.ExitCode -ne 0 -and $configuredQuery.ExitCode -ne 1) {
+        return @{ Path = ''; SkipReason = "git could not read its config (exit code $($configuredQuery.ExitCode))" }
+    }
+    if ($configuredQuery.ExitCode -eq 0) {
+        $configuredPath = $configuredQuery.FirstLine
+        if ([string]::IsNullOrWhiteSpace($configuredPath)) {
+            return @{ Path = ''; SkipReason = 'core.excludesFile is empty, so git reads no global excludes file' }
+        }
+        if (-not [System.IO.Path]::IsPathRooted($configuredPath)) {
+            return @{ Path = ''; SkipReason = "core.excludesFile is the relative path '$configuredPath', which git resolves against each repository" }
+        }
+        return @{ Path = [System.IO.Path]::GetFullPath($configuredPath); SkipReason = '' }
+    }
+    if (-not [string]::IsNullOrEmpty($env:XDG_CONFIG_HOME)) {
+        return @{ Path = [System.IO.Path]::GetFullPath((Join-Path (Join-Path $env:XDG_CONFIG_HOME 'git') 'ignore')); SkipReason = '' }
+    }
+    # git expands ~ with its own home lookup, which on Windows falls back from
+    # HOME to HOMEDRIVE plus HOMEPATH, and then to USERPROFILE, so asking git
+    # yields the exact default path git reads.
+    $homeDefaultQuery = Invoke-GitQuery -GitPath $gitCommand.Path -Arguments @('-c', 'squad.excludesprobe=~/.config/git/ignore', 'config', '--type=path', '--get', 'squad.excludesprobe')
+    if ($homeDefaultQuery.ExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($homeDefaultQuery.FirstLine)) {
+        return @{ Path = ''; SkipReason = 'git could not resolve its home folder' }
+    }
+    return @{ Path = [System.IO.Path]::GetFullPath($homeDefaultQuery.FirstLine); SkipReason = '' }
+}
+
+function Read-ExcludesFileContent {
+    param([Parameter(Mandatory)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        return ''
+    }
+    return [System.IO.File]::ReadAllText($Path)
+}
+
+function Test-TempReportsEntryPresent {
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Content)
+    # git keeps leading spaces as part of a pattern and drops only trailing
+    # ones, so only trailing spaces are trimmed before matching.
+    foreach ($line in ($Content -split "`r?`n")) {
+        if ($line.TrimEnd(' ') -match $TempReportsEquivalentPatternRegex) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Get-ExcludesContentWithEntry {
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Content)
+    $newline = "`n"
+    if ($Content.Contains("`r`n")) {
+        $newline = "`r`n"
+    }
+    $separator = ''
+    if ($Content.Length -gt 0 -and -not $Content.EndsWith("`n")) {
+        $separator = $newline
+    }
+    return $Content + $separator + $TempReportsExcludeMarker + $newline + $TempReportsExcludePattern + $newline
+}
+
+# Only the marker line directly followed by the installer's pattern counts as
+# the installer's entry, so a user's own equivalent line always survives.
+function Get-ExcludesContentWithoutEntry {
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Content)
+    $markedEntryRegex = '(?m)^' + [regex]::Escape($TempReportsExcludeMarker) + '\r?\n' + [regex]::Escape($TempReportsExcludePattern) + '(\r?\n|\z)'
+    return [regex]::Replace($Content, $markedEntryRegex, '')
+}
+
+function New-SkippedExcludePlan {
+    param([Parameter(Mandatory)][string]$Reason)
+    Write-Warning ('The temp reports entry in the global git excludes file was skipped: {0}.' -f $Reason)
+    return @{ State = 'Skipped'; Path = ''; SkipReason = $Reason }
+}
+
+# Decides the excludes file change while planning, so its summary and any
+# skip warning appear before the Proceed prompt, and a folder path or a
+# read-only file is skipped before any squad file is copied.
+function Get-TempReportsExcludePlan {
+    param(
+        [Parameter(Mandatory)][string]$ActionValue,
+        [Parameter(Mandatory)][bool]$AgentsSelected,
+        [Parameter(Mandatory)][string]$Mode
+    )
+    if (-not $AgentsSelected) {
+        return @{ State = 'NotApplicable'; Path = ''; SkipReason = '' }
+    }
+    if ($Mode -eq 'Skip') {
+        return @{ State = 'Skipped'; Path = ''; SkipReason = 'opted out' }
+    }
+    $excludesFile = Get-GitGlobalExcludesFile
+    if ($excludesFile.SkipReason) {
+        return New-SkippedExcludePlan -Reason $excludesFile.SkipReason
+    }
+    if (Test-Path -LiteralPath $excludesFile.Path -PathType Container) {
+        return New-SkippedExcludePlan -Reason "the excludes path $($excludesFile.Path) is a folder"
+    }
+    $content = Read-ExcludesFileContent -Path $excludesFile.Path
+    if ($ActionValue -eq 'install') {
+        $state = 'Add'
+        if (Test-TempReportsEntryPresent -Content $content) {
+            $state = 'Present'
+        }
+    }
+    else {
+        $state = 'Absent'
+        if ((Get-ExcludesContentWithoutEntry -Content $content) -cne $content) {
+            $state = 'Remove'
+        }
+    }
+    $needsWrite = ('Add', 'Remove') -contains $state
+    if ($needsWrite -and (Test-Path -LiteralPath $excludesFile.Path -PathType Leaf) -and (Get-Item -LiteralPath $excludesFile.Path -Force).IsReadOnly) {
+        return New-SkippedExcludePlan -Reason "the excludes file $($excludesFile.Path) is read-only"
+    }
+    return @{ State = $state; Path = $excludesFile.Path; SkipReason = '' }
+}
+
+function Get-TempReportsExcludeSummary {
+    param([Parameter(Mandatory)][hashtable]$ExcludePlan)
+    switch ($ExcludePlan.State) {
+        'Add' { return ('will add {0} to {1}' -f $TempReportsExcludePattern, $ExcludePlan.Path) }
+        'Present' { return ('already covered in {0}' -f $ExcludePlan.Path) }
+        'Remove' { return ('will remove the installer''s entry from {0}' -f $ExcludePlan.Path) }
+        'Absent' { return ('no installer entry in {0}' -f $ExcludePlan.Path) }
+        'Skipped' { return ('skipped ({0})' -f $ExcludePlan.SkipReason) }
+    }
+    throw "Unknown temp reports exclude state '$($ExcludePlan.State)'."
+}
+
+function Invoke-TempReportsExcludePlan {
+    param([Parameter(Mandatory)][hashtable]$ExcludePlan)
+    if ('Add', 'Remove' -notcontains $ExcludePlan.State) {
+        return
+    }
+    $statusLabel = 'entry added'
+    if ($ExcludePlan.State -eq 'Remove') {
+        $statusLabel = 'entry removed'
+    }
+    if ($WhatIfPreference) {
+        Write-Host ('  {0,-70} planned ({1})' -f $ExcludePlan.Path, $statusLabel) -ForegroundColor Green
+        return
+    }
+    # Re-read at write time, because a menu run can wait at Proceed while
+    # the user or another tool edits the same file.
+    $content = Read-ExcludesFileContent -Path $ExcludePlan.Path
+    if ($ExcludePlan.State -eq 'Add') {
+        $updatedContent = $content
+        if (-not (Test-TempReportsEntryPresent -Content $content)) {
+            $updatedContent = Get-ExcludesContentWithEntry -Content $content
+        }
+    }
+    else {
+        $updatedContent = Get-ExcludesContentWithoutEntry -Content $content
+    }
+    if ($updatedContent -ceq $content) {
+        Write-Host ('  {0,-70} unchanged' -f $ExcludePlan.Path) -ForegroundColor DarkGray
+        return
+    }
+    $excludesFolder = Split-Path -Parent $ExcludePlan.Path
+    if (-not (Test-Path -LiteralPath $excludesFolder -PathType Container)) {
+        New-Item -Path $excludesFolder -ItemType Directory -Force | Out-Null
+    }
+    # WriteAllText keeps the user's file in UTF-8, where Set-Content on
+    # Windows PowerShell 5.1 would re-encode it in the ANSI codepage.
+    [System.IO.File]::WriteAllText($ExcludePlan.Path, $updatedContent)
+    Write-Host ('  {0,-70} {1}' -f $ExcludePlan.Path, $statusLabel) -ForegroundColor Green
+}
+
 try {
     $useMenu = ($PSBoundParameters.Count -eq 0)
     if ($useMenu) {
@@ -926,14 +1181,19 @@ try {
             $CatReasoningEffort = $menuChoices.ReviewerSettings.CatEffort
         }
         $SubagentGuard = $menuChoices.SubagentGuard
+        $TempReportsExclude = $menuChoices.TempReportsExclude
     }
 
     Confirm-ParameterCombo
     $Components = Get-ComponentSelection -RequestedComponents @($Components)
     $targets = Get-TargetFolders -TargetLevel $Level -ProjectPath $ProjectRoot
     $selectedTokens = @($Components)
-    $installingAgents = (($selectedTokens -contains 'agents') -or ($selectedTokens -contains 'all')) -and ($Action -eq 'install')
+    $agentsSelected = ($selectedTokens -contains 'agents') -or ($selectedTokens -contains 'all')
+    $installingAgents = $agentsSelected -and ($Action -eq 'install')
     $installingHooks = (($selectedTokens -contains 'hooks') -or ($selectedTokens -contains 'all')) -and ($Action -eq 'install')
+    if ($TempReportsExclude -eq 'Skip' -and -not $agentsSelected) {
+        throw '-TempReportsExclude Skip applies only when the agents component is selected.'
+    }
     if ($PSBoundParameters.ContainsKey('SubagentGuard') -and $Action -eq 'uninstall' -and $SubagentGuard -ne 'Auto') {
         throw '-SubagentGuard applies only to install runs.'
     }
@@ -946,6 +1206,7 @@ try {
     $guardInstallIncluded = ($Action -eq 'install') -and (Test-GuardHookIncluded -ActionValue $Action -ComponentsValue $selectedTokens -SubagentGuardMode $SubagentGuard)
     $reviewerSettings = Get-ReviewerSettings -InstallingAgents $installingAgents -GuardHookIncluded $guardInstallIncluded -FromMenu $useMenu
     $plan = Get-InstallOperationPlan -ActionValue $Action -ComponentsValue $Components -Targets $targets -TargetLevel $Level -ReviewerSettings $reviewerSettings -SubagentGuardMode $SubagentGuard
+    $tempReportsExcludePlan = Get-TempReportsExcludePlan -ActionValue $Action -AgentsSelected $agentsSelected -Mode $TempReportsExclude
 
     Write-Host "Copilot Squad $($Action.ToLowerInvariant())"
     Write-Host "Level: $Level"
@@ -961,6 +1222,9 @@ try {
             $guardSummary = 'included'
         }
         Write-Host ('Subagent delegation guard: {0}' -f $guardSummary)
+    }
+    if ($tempReportsExcludePlan.State -ne 'NotApplicable') {
+        Write-Host ('Temp reports git exclude: {0}' -f (Get-TempReportsExcludeSummary -ExcludePlan $tempReportsExcludePlan))
     }
     Write-Host ''
 
@@ -985,6 +1249,7 @@ try {
     else {
         $summary = Invoke-UninstallPlan -FileOps $plan.FileOps -FolderPrunes $plan.FolderPrunes -Targets $targets -SquadPaths $plan.SquadPaths -SquadFolders $plan.SquadFolders
     }
+    Invoke-TempReportsExcludePlan -ExcludePlan $tempReportsExcludePlan
 
     if ($WhatIfPreference) {
         Write-Host ''
