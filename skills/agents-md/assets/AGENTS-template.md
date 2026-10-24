@@ -305,17 +305,114 @@ Decision guide (only applies when the `raise` is **inside** an `except ... as e`
 
 ## Security
 
+<!-- Delete the subsections that do not apply to the project (for example Web Application Security for a CLI tool or a library, or Data Protection at Rest for a project that stores no credentials or sensitive data). -->
+
+Security is designed in from the start, not added at review time. Each rule applies only where the code touches the concern it names.
+
+### Secure by Design
+
+- Deny by default. Access and network exposure start closed and open only through explicit grants.
+- Fail closed. When a security check cannot complete, such as when the auth service is down, a signature cannot be verified, or input cannot be parsed, reject the request instead of letting it through.
+- Grant least privilege to users, services, database accounts, tokens, and CI jobs. Give each the narrowest scope and the shortest lifetime that works.
+- Layer defenses. Never rely on a single control, such as a client-side check, a firewall, or a network boundary, to stop an attack.
+- Keep the attack surface minimal. Do not ship debug endpoints, development-only admin tools, verbose errors, or unused ports and features to production.
+- Ship secure defaults. A risky option, such as permissive CORS or debug mode, is off by default and enabled explicitly per environment.
+- Threat-model every new trust boundary, such as an endpoint, an integration, a file input, or a privilege level, before building it. Name what an attacker controls, what they could reach, and which control stops them.
+
+### Input Validation and Injection
+
 - Sanitize and validate all user and external inputs at the boundary.
 - Never trust data from outside the system boundary.
 - Use allowlists, not denylists. Reject by default, accept only known-good patterns.
-- Use schema validation libraries (Pydantic, zod, JSON Schema), and do not hand-roll validation for complex structures.
-- Keep secrets out of code. Use environment variables or secret managers.
-- No hardcoded API keys, tokens, or passwords.
-- SQL queries use parameterized statements, never string concatenation.
-- Enforce access control on every new resource. Grant permissions granularly (least privilege). Do not make features universally accessible. Re-check access rules when touching existing resources.
-- Do not expose internal details in error messages to end users.
+- Use schema validation libraries, such as Pydantic, zod, or a JSON Schema validator, and do not hand-roll validation for complex structures.
 - Validate on the server side always, because client-side validation is a UX convenience, not a security measure.
+- SQL queries use parameterized statements, never string concatenation.
+- Bind input to explicit request models with allowlisted fields, never straight onto persistence models, so a client cannot set fields such as `role` or `is_admin`.
+- Never pass untrusted input to a shell, `eval`, or a dynamic import, and never compile it as a template. Start processes with an argument list instead of a shell string.
+- Resolve file paths built from input to their canonical form, and reject any path outside the intended root directory.
+- Check uploads against a size limit and an allowlist of types detected from the file content and extension, not from the declared `Content-Type`. Store them under generated names outside the web root, and never execute them.
+- Never deserialize untrusted data with a deserializer that can instantiate arbitrary types, such as `pickle`, Java native serialization, .NET `BinaryFormatter`, or an unsafe YAML loader. Use JSON or another schema-bound format.
+- Disable external entity and DTD processing in XML parsers.
+- Cap request body size, collection and string lengths, and nesting depth, and avoid regexes with catastrophic backtracking on untrusted input, so one request cannot exhaust memory or CPU.
+
+### Web Application Security
+
+- Encode output for its context, such as an HTML body, an attribute, JavaScript, a URL, or CSS. Rely on the framework's auto-escaping, and never mark unsanitized untrusted content as safe.
+- Protect every cookie-authenticated, state-changing request with CSRF tokens or the framework's CSRF protection, and set `SameSite=Lax` or `SameSite=Strict` on those cookies as an extra layer. Never change state on `GET`.
+- Set session cookies with `Secure`, `HttpOnly`, and `SameSite=Lax` or `SameSite=Strict`. Rotate the session identifier on login and privilege change, and invalidate it on logout.
+- Redirect only to allowlisted targets, never to a URL taken from the request as is. To accept a local path, parse it with the platform's URL parser against the application's own origin, accept it only when the parsed origin is unchanged, and redirect to the application's own origin followed by the parsed path, query, and fragment.
+- Guard outbound requests built from user input against SSRF. Allowlist the target hosts when the valid set is known, and otherwise block private, loopback, link-local, and cloud metadata address ranges (IPv4 and IPv6). Apply the check after DNS resolution and on every redirect, and connect to the address that passed it, so DNS rebinding cannot swap it.
+- Send security headers: a restrictive `Content-Security-Policy`, `Strict-Transport-Security`, `X-Content-Type-Options: nosniff`, and frame protection (`frame-ancestors` or `X-Frame-Options`).
+- Configure CORS with an explicit origin allowlist. Never reflect a request origin that is not on the allowlist, and never combine a wildcard origin with credentials.
+
+### Authentication and Access Control
+
+- Enforce access control on every new resource. Grant permissions granularly. Do not make features universally accessible. Re-check access rules when touching existing resources.
+- Authorize every request on the server, and allow unauthenticated access only through an explicit grant, such as one for login, signup, password reset, health checks, or public content. Check object-level ownership, not only the role, so a user cannot reach another user's record by changing an id.
+- Use the framework's or a vetted library's authentication instead of a custom scheme.
+- Return the same generic error for an unknown account and a wrong password, and keep the response timing alike.
+- Rate limit login, password reset, token, and other sensitive or expensive endpoints, with lockout or exponential backoff after repeated authentication failures.
+- Verify the signature of every signed token, such as a JWT, with an allowlisted algorithm, and check its issuer, audience, and expiry.
+- Give sessions and access tokens an expiry, and make password reset and invitation tokens single-use and short-lived.
+
+### Secrets Management
+
+- Keep secrets out of code. Load them at runtime from a source such as environment variables or a secret manager. <!-- fill in the project's secret manager or KMS -->
+- No hardcoded API keys, tokens, or passwords.
+- Never commit a real secret to version control, whether in code, `.env` files, config, or test fixtures. Keep local secret files in the ignore list, and rotate any secret that was ever committed.
+- Use separate secrets per environment, so a development secret never unlocks production.
+- Scope each credential to the least privilege it needs, and rotate it on a schedule and on suspected exposure.
+- Never put secrets in error messages or analytics events.
+
+### Data Protection at Rest
+
+How stored data is protected depends on how the system uses it.
+
+- **Passwords** (verified only): hash them through a vetted library with Argon2id, scrypt, bcrypt, or PBKDF2, using a unique salt per password and current recommended cost parameters, such as those in the OWASP Password Storage Cheat Sheet. Prefer Argon2id when choosing a hasher for new code, and use PBKDF2 when FIPS compliance requires it. A framework's default hasher must meet the same rule, so raise its cost setting when the default falls below the recommended cost. Never encrypt passwords, and never store them in plaintext.
+- **Issued tokens and API keys** (verified only, by lookup): generate them with at least 128 bits of randomness from a cryptographically secure generator, store only their hash (SHA-256 is enough for high-entropy random values), and compare in constant time. Reveal the plaintext only once, when it is issued.
+- **Read-back secrets**, such as third-party API keys, refresh tokens from external OAuth providers, and credentials for outbound calls: encrypt them through a vetted library with an authenticated encryption algorithm, such as AES-256-GCM or ChaCha20-Poly1305. Use envelope encryption, where a data key encrypts the value and a key-encryption key held in a KMS, an HSM, or a secret manager encrypts the data key. Never store a plaintext key (a data key or the key-encryption key) in the same database, in code, or in committed config.
+- **Sensitive personal data**, such as government ids, payment data, and health data: encrypt it at field level with the same envelope scheme when database or disk encryption alone does not meet the threat model or the applicable regulation.
+- Store a key id with each ciphertext, so keys can rotate while older values still decrypt. After rotating the key-encryption key, re-wrap the data keys under it. Re-encrypt the values themselves only when a data key rotates.
+- Give backups, exports, and replicas the same protection as the primary store.
+- Collect and keep only the sensitive data a feature needs, and delete it when its retention period ends.
+
+### Cryptography
+
+- Use vetted, maintained libraries, such as the platform's standard crypto library or libsodium. Never implement a cryptographic algorithm or protocol yourself.
+- Prefer high-level APIs, such as an authenticated `encrypt` call or a password hashing call, over low-level primitives, because they choose safe parameters.
+- Never use MD5, DES, 3DES, RC4, or ECB mode for security purposes, and never use SHA-1 for signatures or collision resistance. Hashes for non-security purposes, such as building cache keys or deduplicating data, may use any algorithm.
+- Generate tokens, salts, nonces, and keys with a cryptographically secure random generator, such as `secrets` in Python, `crypto.randomBytes` in Node.js, or `RandomNumberGenerator` in .NET. Never use a general-purpose `random` function for them.
+- Never reuse a nonce with the same key. Let the library generate nonces when it can.
+- Compare secrets, hashes, and signatures with a constant-time function.
+- Use current key sizes for new keys: 256-bit symmetric keys, RSA of at least 3072 bits, or elliptic curve keys, such as P-256 or Ed25519 keys.
+
+### Transport Security
+
+- Use TLS 1.2 or newer for all external traffic and for internal traffic that carries credentials or sensitive data.
+- Never disable certificate or hostname verification in shipped code. Trust a private CA by configuring it explicitly, not by turning verification off.
+- Serve web applications over HTTPS only, and redirect HTTP to HTTPS.
+- Never put sensitive data or long-lived secrets, such as passwords, API keys, or session tokens, in URLs, because URLs end up in logs, browser history, and referrer headers. A token that must travel in a link, such as a password reset link, an invitation link, or a presigned download link, is single-use or short-lived, and the page that receives it sends `Referrer-Policy: no-referrer`. When a third-party API accepts a key only in the query string, keep those URLs out of logs and error messages.
+
+### Dependencies and Supply Chain
+
+- Pin dependency versions with a lockfile, and commit the lockfile.
+- Install packages only from trusted registries, and check the exact package name to avoid typosquatting.
+- Before adding a dependency, check its maintenance and license, and prefer the standard library when it covers the need.
+- Run the project's vulnerability audit after every dependency change, and do not add or keep a dependency with a known vulnerability that affects the code. <!-- append the project's audit command here, for example `pip-audit`, `npm audit`, or `dotnet list package --vulnerable` -->
+- Never pipe a remote script straight into a shell, in code, docs, or CI. Download it, verify its checksum or signature, then run it.
+- Pin CI actions to a full commit SHA and container base images to a digest, because version tags can be repointed. Grant CI tokens only the permissions the job needs.
+
+### Security Logging and Error Handling
+
+- Do not expose internal details, such as stack traces, queries, file paths, or versions, in errors returned to remote or less-privileged callers. In a service, log the detail on the server and return a correlation id the caller can report.
+- Audit-log security events: logins and failed logins, permission and role changes, secret and key access, and administrative actions. Record who acted, what happened, when, and the outcome, using only the identifiers that [PII in Logs](#pii-in-logs-zero-tolerance) approves.
+- Keep audit logs append-only for the application, so a compromised service cannot erase its tracks.
+
+### Security Tests
+
 - Use fake or anonymized data in tests, never real user data.
+- Cover each security control with adversarial tests: unauthenticated and cross-user access, injection payloads, path traversal, oversized input, and tokens that are tampered, expired, or replayed.
+- Assert that a rejected request has no side effect, not only that it returns an error.
 
 ## Observability
 
@@ -479,7 +576,7 @@ npx vitest run tests/your_tests.test.ts --coverage
 
 ### Priority (blockers first)
 
-1. **Security & PII**: no PII in logs, no hardcoded secrets, input validation
+1. **Security & PII**: no PII in logs, and no violation of any [Security](#security) rule
 2. **DRY**: no duplicate types, classes, functions, or logic
 3. **File Structure**: single responsibility per file, naming respected
 4. **Architecture**: single responsibility, proper layer separation
