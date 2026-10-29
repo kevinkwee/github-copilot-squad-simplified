@@ -353,7 +353,7 @@ skills/
 ```
 
 - **`/merge-strategy`**: resolves what merges (a pull request or a local branch into its base), chooses the strategy, and performs the merge when the session provides no built-in merge skill.
-- **Strategy precedence**: the user-named strategy wins, then a strategy the target repository clearly documents or enforces (CONTRIBUTING.md rules, branch protection), then the squad default of a merge commit (`gh pr merge --merge`, `git merge --no-ff` locally). The skill never infers squash or rebase from the shape of history, and the absence of merge commits is not a squash or rebase signal.
+- **Strategy precedence**: the user-named strategy wins, then a strategy the target repository clearly documents or enforces (CONTRIBUTING.md rules, branch protection), then the squad default of a squash merge (`gh pr merge --squash`, `git merge --squash <branch>` plus a commit locally). The skill never infers squash or rebase from the shape of history, and the absence of merge commits is not a squash or rebase signal.
 - **Strategy authority**: load it before any merge, including one a built-in merge workflow skill performs. It owns the strategy choice.
 - **Conflicts route through the workflow**: when a merge hits conflicts, the direct merge path stops and the conflict resolution runs the squad workflow (implement, then the review loop) before the merge completes with the chosen strategy.
 - **Sync exclusion**: branch sync flows that only bring a branch up to date with its upstream (for example the session's sync-upstream skill or `git pull --rebase`) are updates, not merge decisions, so the skill does not apply to them.
@@ -482,7 +482,7 @@ The VS Code Agents window (built on the Copilot SDK harness) ships its own workf
 | "open a PR", "open a draft PR" | built-in `create-pr` / `create-draft-pr` | `pr-description` |
 | "write the PR description" | `pr-description` (text only) | `pr-description` |
 | `/pr-description`, then "create the PR as-is" | built-in PR skill when present, else `gh pr create` | `pr-description` |
-| "merge it", "merge this PR" | built-in `merge` skill | `merge-strategy` (default: merge commit) |
+| "merge it", "merge this PR" | built-in `merge` skill | `merge-strategy` (default: squash) |
 | merge hits conflicts | the resolution runs the workflow, then the merge completes | `merge-strategy` |
 | Harness without built-in skills | the squad skills' own git / `gh` steps | the squad skills |
 

@@ -89,7 +89,7 @@ Design for security from the start. Deny by default, and grant least privilege. 
 
 Commit, pull request, and merge requests do not run the workflow below. Handle them directly:
 
-- When the session provides built-in commit, PR, or merge workflow skills, those skills own the action: the commit itself, the PR creation, update, or merge, and draft mode. Load the `commit-message` and `pr-description` skills for the content. They own the message, title, and description style. Load the `merge-strategy` skill for merge requests. It owns the strategy choice, and its default is a merge commit when neither the user nor the repository's documented convention names one.
+- When the session provides built-in commit, PR, or merge workflow skills, those skills own the action: the commit itself, the PR creation, update, or merge, and draft mode. Load the `commit-message` and `pr-description` skills for the content. They own the message, title, and description style. Load the `merge-strategy` skill for merge requests. It owns the strategy choice, and its default is a squash merge when neither the user nor the repository's documented or enforced convention names one.
 - When the session provides no built-in skills, the `commit-message`, `pr-description`, and `merge-strategy` skills perform the action themselves, using their own git and `gh` steps.
 - When a commit, PR, or merge request is combined with an implementation request, run the workflow below for the implementation first, then handle the commit, PR, or merge part as described above.
 - When a merge needs conflict resolution, stop the direct path. Treat the resolution as a regular technical request and run the workflow below on it, then complete the merge with the chosen strategy.
