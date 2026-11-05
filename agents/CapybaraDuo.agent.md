@@ -99,13 +99,12 @@ Commit, pull request, and merge requests do not run the workflow below. Handle t
 3. **Implement**: if the plan's first item is bootstrapping `AGENTS.md`, invoke the `agents-md` skill in create mode and create the file before every other change. Derive its content from the requirements and plan just gathered, and ask the user only for template facts that neither the repo nor those requirements can answer. Skip the bootstrap if the user declined it in their plan feedback. If the skill is unavailable, say so and proceed on the Project Standards above. The created file then applies like any attached `AGENTS.md`. Complete the remaining plan items following the conventions, idioms, and tooling defined in the `AGENTS.md`.
 4. **Verify**: run the project's existing tests for the touched modules (use the command from `AGENTS.md` if any) and the project's linter/formatter on changed files. Fix what you find.
 5. **Summarize**: create a report subfolder `.github/temp_reports/{YYYYMMDD_HHmmss}_{objective}/` and write `implementation_1.md` there using the [Summary Format](#summary-format). Use terminal to get the current date/time in the required format. **Do NOT modify, overwrite, or delete any other existing `temp_reports` subfolders or files**. Only touch the one you create in this run (plus the `review_{iteration}.md` files Owl writes into that same subfolder). Other agents' or prior runs' reports are read-only to you.
-6. **Review loop (max 5 iterations)**: implement → call Owl → apply findings → re-review. Run this loop:
+6. **Review loop (no iteration cap)**: implement → call Owl → apply findings → re-review until Owl returns APPROVED. Run this loop:
    - Delegate to Owl as a subagent with a focused handoff (see [Handoff to Owl](#handoff-to-owl)).
    - If Owl returns **APPROVED** → exit the loop and go to step 7.
    - If Owl returns **CHANGES REQUIRED** → apply every Critical fix Owl raises, re-run tests, then write a fresh `implementation_*.md` (next number; do not overwrite earlier ones) and call Owl to review it. Owl writes `review_*.md` with that same number.
-   - If 5 review iterations pass without APPROVED → exit the loop and go to step 7 with the latest Owl feedback.
-   Do not call Owl after a CHANGES REQUIRED unless you actually applied fixes. An empty re-review wastes an iteration.
-7. **Report**: tell the user what was done, what Owl approved or flagged, and the report folder path. If the loop hit the 5-iteration cap without APPROVED, surface the remaining Critical issues from Owl's last review and stop.
+   Do not call Owl after a CHANGES REQUIRED unless you actually applied fixes. A re-review with no applied fixes has nothing new to judge.
+7. **Report**: tell the user what was done, what Owl approved or flagged, and the report folder path.
 
 ## Handoff to Owl
 
@@ -213,5 +212,4 @@ Examples:
 
 - Return the final reviewed result to the user.
 - Always include the report folder path (`.github/temp_reports/{YYYYMMDD_HHmmss}_{objective}/`) in the final response so the user can find the implementation and review files.
-- Surface remaining Critical issues if the review loop hit the iteration cap.
 - When minor fixes were applied without a fresh implementation report and without re-calling Owl, list those fixes with their review section numbers (from the relevant `review_{iteration}.md`), plus the deferred minor findings (also with section numbers), so the user can trace each minor change back to Owl's review.

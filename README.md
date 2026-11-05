@@ -167,9 +167,9 @@ For technical requests, `Capybara` runs this loop. **In Trio, this loop is skipp
 3. Hand off to `Owl` (focused handoff: the implementation report path, not the whole conversation).
 4. If `Owl` returns **APPROVED** → in Trio, proceed to section 3 (the Cat loop); in Duo, return the final result.
 5. If `Owl` returns **CHANGES REQUIRED** → apply every Critical fix, re-run tests, write a fresh `implementation_{iteration}.md` (next number), and call `Owl` again (Owl writes `review_{iteration}.md` with that same number).
-6. Repeat until approved, max 5 iterations.
+6. Repeat until approved. The loop has no iteration cap.
 
-If still not approved after 5 iterations, `Capybara` stops and surfaces the remaining Critical issues for the user to decide (the Cat loop is skipped).
+The loop also ends when `Capybara` hits an error it cannot resolve, which it reports instead of looping, or when it believes a Critical finding is wrong and asks the user to decide.
 
 ### 3) Comment & docstring review loop (Capybara ↔ Cat, Trio only)
 
@@ -178,9 +178,9 @@ Trio mode runs a second, focused loop with `Cat`. For regular technical requests
 1. Hand off to `Cat` (focused handoff: the report subfolder, the number N of the latest `implementation_*.md`, and every `implementation_*.md` Cat has not reviewed yet). At the Owl-to-Cat transition Cat is handed `implementation_1.md`..`implementation_N.md` (all of them, since this is its first review) but writes a single `docstring_review_{N}.md`. "Handed" scopes the handoff, not Cat's tool access. Cat can read more from disk if it needs extra context.
 2. If `Cat` returns **APPROVED** → return the final result.
 3. If `Cat` returns **CHANGES REQUIRED** → apply every Critical fix (and any cheap minor suggestions), re-run tests/lint if code is touched, write a fresh `implementation_{iteration}.md` (next number), and call `Cat` again (Cat writes `docstring_review_{iteration}.md` with that same number).
-4. Repeat until approved, max 5 iterations.
+4. Repeat until approved. The loop has no iteration cap.
 
-If still not approved after 5 iterations, `Capybara` stops and surfaces the remaining Critical issues for the user to decide.
+The loop also ends when `Capybara` hits an error it cannot resolve, which it reports instead of looping, or when it believes a Critical finding is wrong and asks the user to decide.
 
 ### Flow diagram (Trio)
 
@@ -198,7 +198,7 @@ sequenceDiagram
   else Technical implementation
     C->>C: Investigate, plan, implement, verify
     opt Skipped for comment/docstring-only requests
-      loop Until Owl APPROVED (max 5 iterations)
+      loop Until Owl APPROVED
         C->>W: Code review handoff (implementation report path)
         W-->>C: APPROVED or CHANGES REQUIRED
         alt CHANGES REQUIRED
@@ -206,7 +206,7 @@ sequenceDiagram
         end
       end
     end
-    loop Until Cat APPROVED (max 5 iterations)
+    loop Until Cat APPROVED
       C->>A: Comment & docstring review handoff
       A-->>C: APPROVED or CHANGES REQUIRED
       alt CHANGES REQUIRED
@@ -225,7 +225,7 @@ sequenceDiagram
 
 - Single entry point: receives requests and acts on them directly.
 - Does the technical work: investigate, plan, implement, run tests, lint/format.
-- Manages the Capybara ↔ Owl code review loop, then the Capybara ↔ Cat comment/docstring loop (each max 5 iterations).
+- Manages the Capybara ↔ Owl code review loop, then the Capybara ↔ Cat comment/docstring loop (each repeats until approved, with no iteration cap).
 - For comment/docstring-only requests (Trio), skips the Owl loop and goes straight to the Cat loop.
 - Applies **all** Critical findings from Owl and Cat; never skips them by reasoning them away.
 - Asks clarifying questions (with freeform input) when the request is ambiguous.
@@ -563,7 +563,7 @@ Common tweaks you can make:
 - Switch between Trio (`Capybara`) and Duo (`Capybara Duo`)
 - Adjust code review strictness in `Owl`
 - Adjust comment/docstring review strictness in `Cat`
-- Change max loop policy in `Capybara` (default: 5 iterations per loop)
+- Add an iteration cap to the review loops in `Capybara` and `Capybara Duo` (default: uncapped)
 - Adapt tone/style prompts
 
 ## Official references
