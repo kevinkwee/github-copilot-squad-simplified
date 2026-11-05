@@ -21,26 +21,31 @@
 
     Two hooks ship. The shell guard (guard-pwsh-continuation) always travels
     with the hooks component. The subagent delegation guard
-    (guard-subagent-delegation) denies a reviewer subagent call that omits
-    the model or reasoning effort field, and it also denies an effort that
-    differs from the installed reviewer effort when the call's model
-    contains the installed reviewer model. It travels per -SubagentGuard:
-    Auto installs it with the agents component, Skip leaves it out, and
-    Force installs it into any install that includes the agents or hooks
-    component, for example a hooks-only install when the agents were copied
-    by hand. The guard script is rewritten with the four reviewer values, so
-    a hooks-only guard install also requires them.
+    (guard-subagent-delegation) judges a reviewer subagent call against the
+    installed reviewer values. It denies a call that omits the model or
+    reasoning effort field, and an effort that differs from the installed
+    effort when the call's model contains the installed model. When the
+    optional default pair is set, it judges every other subagent call against
+    that pair the same way, and when the pair is left empty those calls pass.
+    It travels per -SubagentGuard: Auto installs it with the agents
+    component, Skip leaves it out, and Force installs it into any install
+    that includes the agents or hooks component, for example a hooks-only
+    install when the agents were copied by hand. The guard script is
+    rewritten with the four reviewer values and the default pair, so a
+    hooks-only guard install requires the reviewer values too.
 
     The agents component rewrites the two Capybara templates the same way,
     filling the Owl and Cat placeholder pairs with the values collected by
     the menu, or passed with -OwlModel, -OwlReasoningEffort, -CatModel, and
     -CatReasoningEffort for scripted runs. The Capybara Duo template receives
-    only the Owl pair. The model values may be full ids, or a distinctive
-    part of the name such as GLM-5.3. The values do not have to match
-    exactly, and the installed delegation rule resolves them to the first
-    available match at run time. Reasoning effort values are limited to
-    none, minimal, low, medium, high, xhigh, and max, accepted without
-    regard to case and stored in lowercase.
+    only the Owl pair. With -DefaultSubagentModel and
+    -DefaultSubagentReasoningEffort, both templates also receive the default
+    pair, and without them the line that would hold it is dropped. The model
+    values may be full ids, or a distinctive part of the name such as
+    GLM-5.3. The values do not have to match exactly, and the installed
+    delegation rule resolves them to the first available match at run time.
+    Reasoning effort values are limited to none, minimal, low, medium, high,
+    xhigh, and max, accepted without regard to case and stored in lowercase.
 
     Runs that select the agents component also manage one entry in the
     user's global git excludes file: the file the global core.excludesFile
@@ -77,11 +82,11 @@
     Model value copied into __OWL_MODEL__ in the installed Capybara
     templates and in the installed subagent delegation guard. May be the
     full id, or a distinctive part of the name, for example GLM-5.3. The
-    value cannot contain a single quote or a newline, because the installed
-    guard script embeds it in a single-quoted PowerShell literal that must
-    stay on one line, and cannot be a placeholder. Required on scripted
-    installs that include the agents component or the subagent delegation
-    guard.
+    value cannot contain a single quote, including the typographic single
+    quotes, or a newline, because the installed guard script embeds it in a
+    single-quoted PowerShell literal that must stay on one line, and cannot
+    contain a placeholder. Required on scripted installs that include the
+    agents component or the subagent delegation guard.
 
 .PARAMETER OwlReasoningEffort
     Reasoning effort copied into __OWL_REASONING_EFFORT__ in the installed
@@ -93,11 +98,12 @@
 .PARAMETER CatModel
     Model value copied into __CAT_MODEL__ in the installed Capybara template
     and in the installed subagent delegation guard. May be the full id, or a
-    distinctive part of the name. The value cannot contain a single quote or
-    a newline, because the installed guard script embeds it in a
-    single-quoted PowerShell literal that must stay on one line, and cannot
-    be a placeholder. Required on scripted installs that include the agents
-    component or the subagent delegation guard.
+    distinctive part of the name. The value cannot contain a single quote,
+    including the typographic single quotes, or a newline, because the
+    installed guard script embeds it in a single-quoted PowerShell literal
+    that must stay on one line, and cannot contain a placeholder. Required on
+    scripted installs that include the agents component or the subagent
+    delegation guard.
 
 .PARAMETER CatReasoningEffort
     Reasoning effort copied into __CAT_REASONING_EFFORT__ in the installed
@@ -106,6 +112,33 @@
     to case. Required on scripted installs that include the agents component
     or the subagent delegation guard.
 
+.PARAMETER DefaultSubagentModel
+    Model value copied into __DEFAULT_SUBAGENT_MODEL__ in the installed
+    subagent delegation guard and in the installed Capybara templates. When
+    this value is set, the guard denies any non-reviewer subagent call that
+    omits model or reasoning_effort, and its deny names this value so the
+    caller retries with it. That matters because an omitted model does not
+    inherit the caller's model: the harness runs the subagent on its own
+    default, which may not be served by the configured provider, and the
+    failure reaches the caller as an error it cannot act on. Give the same
+    kind of value as the reviewer models, a full id or a distinctive part of
+    the name. Nothing resolves the value to an id, because the caller matches
+    it against the models it can pick. The value cannot contain a single
+    quote, including the typographic single quotes, or a newline, because the
+    installed guard script embeds it in a single-quoted PowerShell literal
+    that must stay on one line, and cannot contain a placeholder. Optional,
+    and required exactly when -DefaultSubagentReasoningEffort is given. An
+    omitted value leaves non-reviewer calls unchecked, and the Capybara
+    templates then carry no instruction for them.
+
+.PARAMETER DefaultSubagentReasoningEffort
+    Reasoning effort copied into __DEFAULT_SUBAGENT_REASONING_EFFORT__ in
+    the installed subagent delegation guard and in the installed Capybara
+    templates. One of none, minimal, low, medium, high, xhigh, or max,
+    accepted without regard to case. Optional, and required exactly when
+    -DefaultSubagentModel is given, because the guard enforces the pair
+    together.
+
 .PARAMETER SubagentGuard
     How the subagent delegation guard hook travels. Auto (default) installs
     it whenever the agents component is installed. Skip leaves it out and
@@ -113,7 +146,7 @@
     Force installs it into any install that includes the agents or hooks
     component, for example a hooks-only install for a hand-maintained
     agents folder, and fails fast when neither is selected. The guard embeds
-    the four reviewer values, so installs that include it require all four
+    the four reviewer values, so installs that include it require those four
     even when the agents component is not selected. Only install runs accept
     a non-Auto value.
 
@@ -128,16 +161,16 @@
     pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1
 
 .EXAMPLE
-    pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Action install -Components agents,skills -Level user -OwlModel 'GLM-5.3' -OwlReasoningEffort high -CatModel 'flash' -CatReasoningEffort low
+    pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Action install -Components agents,skills -Level user -OwlModel 'GLM-5.3' -OwlReasoningEffort high -CatModel 'flash' -CatReasoningEffort low -DefaultSubagentModel 'DeepSeek-V4.1-Flash' -DefaultSubagentReasoningEffort max
 
 .EXAMPLE
     pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Action install -Components hooks -Level repo -ProjectRoot C:\projects\my-app
 
 .EXAMPLE
-    pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Action install -Components hooks -Level user -SubagentGuard Force -OwlModel 'GLM-5.3' -OwlReasoningEffort high -CatModel 'flash' -CatReasoningEffort low
+    pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Action install -Components hooks -Level user -SubagentGuard Force -OwlModel 'GLM-5.3' -OwlReasoningEffort high -CatModel 'flash' -CatReasoningEffort low -DefaultSubagentModel 'DeepSeek-V4.1-Flash' -DefaultSubagentReasoningEffort max
 
 .EXAMPLE
-    pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Action install -Components agents -Level user -TempReportsExclude Skip -OwlModel 'GLM-5.3' -OwlReasoningEffort high -CatModel 'flash' -CatReasoningEffort low
+    pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Action install -Components agents -Level user -TempReportsExclude Skip -OwlModel 'GLM-5.3' -OwlReasoningEffort high -CatModel 'flash' -CatReasoningEffort low -DefaultSubagentModel 'DeepSeek-V4.1-Flash' -DefaultSubagentReasoningEffort max
 
 .EXAMPLE
     pwsh -NoProfile -ExecutionPolicy Bypass -File install.ps1 -Action uninstall -Level user
@@ -169,6 +202,11 @@ param(
     [ValidateSet('none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max')]
     [string]$CatReasoningEffort,
 
+    [string]$DefaultSubagentModel,
+
+    [ValidateSet('none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max')]
+    [string]$DefaultSubagentReasoningEffort,
+
     [ValidateSet('Auto', 'Skip', 'Force')]
     [string]$SubagentGuard = 'Auto',
 
@@ -191,6 +229,9 @@ $OwlModelPlaceholder = '__OWL_MODEL__'
 $OwlEffortPlaceholder = '__OWL_REASONING_EFFORT__'
 $CatModelPlaceholder = '__CAT_MODEL__'
 $CatEffortPlaceholder = '__CAT_REASONING_EFFORT__'
+$DefaultSubagentModelPlaceholder = '__DEFAULT_SUBAGENT_MODEL__'
+$DefaultSubagentEffortPlaceholder = '__DEFAULT_SUBAGENT_REASONING_EFFORT__'
+$ValuePlaceholders = $OwlModelPlaceholder, $OwlEffortPlaceholder, $CatModelPlaceholder, $CatEffortPlaceholder, $DefaultSubagentModelPlaceholder, $DefaultSubagentEffortPlaceholder
 $CapybaraDuoFile = 'CapybaraDuo.agent.md'
 $AgentFilesWithPlaceholders = 'Capybara.agent.md', $CapybaraDuoFile
 # Parameter attributes cannot reference variables in Windows PowerShell 5.1,
@@ -198,6 +239,7 @@ $AgentFilesWithPlaceholders = 'Capybara.agent.md', $CapybaraDuoFile
 $ReasoningEffortValues = @('none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max')
 $DefaultOwlReasoningEffort = 'high'
 $DefaultCatReasoningEffort = 'low'
+$DefaultSubagentReasoningEffortChoice = 'max'
 $TempReportsExcludePattern = '**/.github/temp_reports/'
 $TempReportsExcludeMarker = '# Copilot Squad agent reports (managed by the squad install.ps1)'
 $TempReportsEquivalentPatternRegex = '^\*\*/\.github/temp_reports/?$'
@@ -269,6 +311,18 @@ function Read-NonEmptyPrompt {
     throw 'No valid value was entered.'
 }
 
+function Read-OptionalPrompt {
+    param(
+        [Parameter(Mandatory)][string]$Prompt,
+        [Parameter(Mandatory)][string]$Example
+    )
+    Write-Host ''
+    Write-Host $Prompt
+    Write-Host ('  {0}' -f $Example)
+    $answer = [string](Read-Host 'Enter a value, or press Enter to leave it unset')
+    return $answer.Trim()
+}
+
 function Read-ReasoningEffortPrompt {
     param(
         [Parameter(Mandatory)][string]$Prompt,
@@ -283,11 +337,15 @@ function Read-ReasoningEffortPrompt {
 }
 
 function Read-ReviewerSettings {
-    $settings = @{ OwlModel = ''; OwlEffort = ''; CatModel = ''; CatEffort = '' }
+    $settings = @{ OwlModel = ''; OwlEffort = ''; CatModel = ''; CatEffort = ''; DefaultSubagentModel = ''; DefaultSubagentEffort = '' }
     $settings.OwlModel = Read-NonEmptyPrompt -Prompt 'Which model should Owl run on? Type any distinctive part of a model name.' -Example 'for example: GLM-5.3'
     $settings.OwlEffort = Read-ReasoningEffortPrompt -Prompt 'Which reasoning effort should Owl use?' -DefaultEffort $DefaultOwlReasoningEffort
     $settings.CatModel = Read-NonEmptyPrompt -Prompt 'Which model should Cat run on? Type any distinctive part of a model name.' -Example 'for example: flash'
     $settings.CatEffort = Read-ReasoningEffortPrompt -Prompt 'Which reasoning effort should Cat use?' -DefaultEffort $DefaultCatReasoningEffort
+    $settings.DefaultSubagentModel = Read-OptionalPrompt -Prompt 'Which model should other subagent calls name unless the user picks one? Reviewers keep their own values.' -Example 'type any distinctive part of a model name, for example: DeepSeek-V4.1-Flash, or press Enter to leave those calls unchecked'
+    if (-not [string]::IsNullOrWhiteSpace($settings.DefaultSubagentModel)) {
+        $settings.DefaultSubagentEffort = Read-ReasoningEffortPrompt -Prompt 'Which reasoning effort should that subagent model use?' -DefaultEffort $DefaultSubagentReasoningEffortChoice
+    }
     return $settings
 }
 
@@ -383,7 +441,7 @@ function Show-Menu {
         $projectPath = Read-ProjectPathPrompt
     }
 
-    $reviewerSettings = @{ OwlModel = ''; OwlEffort = ''; CatModel = ''; CatEffort = '' }
+    $reviewerSettings = @{ OwlModel = ''; OwlEffort = ''; CatModel = ''; CatEffort = ''; DefaultSubagentModel = ''; DefaultSubagentEffort = '' }
     $subagentGuard = 'Auto'
     $tempReportsExclude = 'Auto'
     if ($actionValues[$actionIndex] -eq 'install') {
@@ -395,7 +453,7 @@ function Show-Menu {
         elseif ($selectedTokens -contains 'hooks') {
             $guardIndex = Read-MenuChoiceIndex 'Include the subagent delegation guard hook with the shell guard?' @(
                 'no, install the shell guard only (default)',
-                'yes, also enforce reviewer model and reasoning effort fields') 0
+                'yes, also enforce the reviewer fields and a model and effort on other subagent calls') 0
             if ($guardIndex -eq 1) {
                 $subagentGuard = 'Force'
                 $reviewerSettings = Read-ReviewerSettings
@@ -479,24 +537,42 @@ function Test-GuardHookIncluded {
 
 # The model values are embedded into single-quoted PowerShell literals in
 # the installed guard script, so reject characters that would terminate the
-# literal or split it across lines, and reject placeholder-shaped values
-# that would look unfilled.
-function Confirm-ReviewerModelValue {
+# literal or split it across lines. Reject placeholders too. A whole-value
+# placeholder would look unfilled, and an installer placeholder inside a
+# longer value, such as vendor/__CAT_MODEL__, would be rewritten again by a
+# later replacement in the same template.
+function Confirm-ModelValue {
     param(
         [Parameter(Mandatory)][string]$FieldLabel,
         [Parameter(Mandatory)][string]$Value
     )
-    if ($Value.IndexOf("'") -ge 0 -or
+    $containsPlaceholder = @($ValuePlaceholders | Where-Object { $Value.Contains($_) }).Count -gt 0
+    if ((Test-ContainsSingleQuote -Value $Value) -or
         $Value.IndexOf("`r") -ge 0 -or
         $Value.IndexOf("`n") -ge 0 -or
-        $Value -match '^__.*__$') {
-        throw "The $FieldLabel value cannot contain a single quote, a carriage return, or a line feed, and cannot be a placeholder. Enter a model id or a distinctive part of a model name."
+        $Value -match '^__.*__$' -or
+        $containsPlaceholder) {
+        throw "The $FieldLabel value cannot contain a single quote, including the typographic single quotes, a carriage return, a line feed, or a placeholder such as __CAT_MODEL__. Remove the offending character or placeholder and re-run."
     }
 }
 
-# Returns the four reviewer values the agents templates and the delegation
-# guard need, or four empty strings when neither is installed. Callers only
-# print or embed the values when they are present.
+# PowerShell accepts U+2018 to U+201B as single quote characters, so a value
+# containing one closes the literal the installed guard writes it into and
+# lets the rest of the value run as PowerShell code.
+function Test-ContainsSingleQuote {
+    param([Parameter(Mandatory)][string]$Value)
+    foreach ($character in $Value.ToCharArray()) {
+        $codePoint = [int]$character
+        if ($codePoint -eq 0x27 -or ($codePoint -ge 0x2018 -and $codePoint -le 0x201B)) {
+            return $true
+        }
+    }
+    return $false
+}
+
+# Returns the reviewer values plus the optional default pair, which the two
+# Capybara files and the installed guard embed. The caller only prints or
+# embeds values that are present.
 function Get-ReviewerSettings {
     param(
         [Parameter(Mandatory)][bool]$InstallingAgents,
@@ -507,10 +583,12 @@ function Get-ReviewerSettings {
         if (-not [string]::IsNullOrWhiteSpace($OwlModel) -or
             -not [string]::IsNullOrWhiteSpace($OwlReasoningEffort) -or
             -not [string]::IsNullOrWhiteSpace($CatModel) -or
-            -not [string]::IsNullOrWhiteSpace($CatReasoningEffort)) {
-            throw '-OwlModel, -OwlReasoningEffort, -CatModel, and -CatReasoningEffort apply only when installing the agents component or the subagent delegation guard.'
+            -not [string]::IsNullOrWhiteSpace($CatReasoningEffort) -or
+            -not [string]::IsNullOrWhiteSpace($DefaultSubagentModel) -or
+            -not [string]::IsNullOrWhiteSpace($DefaultSubagentReasoningEffort)) {
+            throw '-OwlModel, -OwlReasoningEffort, -CatModel, -CatReasoningEffort, -DefaultSubagentModel, and -DefaultSubagentReasoningEffort apply only when installing the agents component or the subagent delegation guard.'
         }
-        return @{ OwlModel = ''; OwlEffort = ''; CatModel = ''; CatEffort = '' }
+        return @{ OwlModel = ''; OwlEffort = ''; CatModel = ''; CatEffort = ''; DefaultSubagentModel = ''; DefaultSubagentEffort = '' }
     }
     if (-not $FromMenu) {
         foreach ($value in $OwlModel, $OwlReasoningEffort, $CatModel, $CatReasoningEffort) {
@@ -519,14 +597,27 @@ function Get-ReviewerSettings {
             }
         }
     }
-    $settings = @{
-        OwlModel = $OwlModel.Trim()
-        OwlEffort = $OwlReasoningEffort.Trim().ToLowerInvariant()
-        CatModel = $CatModel.Trim()
-        CatEffort = $CatReasoningEffort.Trim().ToLowerInvariant()
+    # The default pair is optional, because a user can leave non-reviewer calls
+    # unchecked, but the guard enforces the model and the effort together, so
+    # half a pair would be either unenforceable or unusable.
+    if ([string]::IsNullOrWhiteSpace($DefaultSubagentModel) -ne [string]::IsNullOrWhiteSpace($DefaultSubagentReasoningEffort)) {
+        throw '-DefaultSubagentModel and -DefaultSubagentReasoningEffort must be given together, because the guard enforces both fields on the calls it checks. Give both, or neither to leave those calls unchecked.'
     }
-    Confirm-ReviewerModelValue -FieldLabel 'Owl model' -Value $settings.OwlModel
-    Confirm-ReviewerModelValue -FieldLabel 'Cat model' -Value $settings.CatModel
+    $settings = @{
+        OwlModel             = $OwlModel.Trim()
+        OwlEffort            = $OwlReasoningEffort.Trim().ToLowerInvariant()
+        CatModel             = $CatModel.Trim()
+        CatEffort            = $CatReasoningEffort.Trim().ToLowerInvariant()
+        DefaultSubagentModel = ''
+        DefaultSubagentEffort = ''
+    }
+    if (-not [string]::IsNullOrWhiteSpace($DefaultSubagentModel)) {
+        $settings.DefaultSubagentModel = $DefaultSubagentModel.Trim()
+        $settings.DefaultSubagentEffort = $DefaultSubagentReasoningEffort.Trim().ToLowerInvariant()
+        Confirm-ModelValue -FieldLabel 'default subagent model' -Value $settings.DefaultSubagentModel
+    }
+    Confirm-ModelValue -FieldLabel 'Owl model' -Value $settings.OwlModel
+    Confirm-ModelValue -FieldLabel 'Cat model' -Value $settings.CatModel
     return $settings
 }
 
@@ -590,27 +681,26 @@ function Get-SourceFiles {
     return @(Get-ChildItem -LiteralPath $SourceFolder -Recurse -File)
 }
 
-# Rewrites a shipped template's placeholders, and throws when a placeholder is
-# missing or survives. Callers resolve rewrites while planning their
-# operations, so a broken template aborts the whole run before any file is
-# written.
-function ConvertTo-RewrittenTemplate {
+# Rewrites a template's placeholders, and throws when a placeholder is missing
+# or survives. Callers resolve rewrites while planning their operations, so a
+# broken template aborts the whole run before any file is written. A
+# placeholder listed in AllowEmptyReplacement may hold an empty value, which is
+# how an optional value the user left unset is stored.
+function ConvertTo-RewrittenText {
     param(
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Text,
         [Parameter(Mandatory)][string]$TemplatePath,
         [Parameter(Mandatory)][hashtable]$Replacements,
-        [string[]]$ForbiddenAfterRewrite = @()
+        [string[]]$ForbiddenAfterRewrite = @(),
+        [string[]]$AllowEmptyReplacement = @()
     )
-    if (-not (Test-Path -LiteralPath $TemplatePath -PathType Leaf)) {
-        throw "Source file missing in the squad repo: $TemplatePath"
-    }
-    # ReadAllText instead of Get-Content: Windows PowerShell 5.1 decodes a
-    # BOM-less file in the system ANSI codepage, while .NET defaults to UTF-8.
-    $raw = [System.IO.File]::ReadAllText($TemplatePath)
+    $raw = $Text
     foreach ($placeholder in $Replacements.Keys) {
         if (-not $raw.Contains($placeholder)) {
             throw "The template $TemplatePath does not contain the expected placeholder '$placeholder'. Restore the shipped template, then re-run."
         }
-        if ([string]::IsNullOrWhiteSpace([string]$Replacements[$placeholder])) {
+        if ([string]::IsNullOrWhiteSpace([string]$Replacements[$placeholder]) -and
+            $AllowEmptyReplacement -notcontains $placeholder) {
             throw "The replacement for '$placeholder' is empty in $TemplatePath, which would leave a broken instruction."
         }
     }
@@ -627,6 +717,47 @@ function ConvertTo-RewrittenTemplate {
         }
     }
     return $rewritten
+}
+
+# ReadAllText instead of Get-Content: Windows PowerShell 5.1 decodes a
+# BOM-less file in the system ANSI codepage, while .NET defaults to UTF-8.
+function Read-TemplateText {
+    param([Parameter(Mandatory)][string]$TemplatePath)
+    if (-not (Test-Path -LiteralPath $TemplatePath -PathType Leaf)) {
+        throw "Source file missing in the squad repo: $TemplatePath"
+    }
+    return [System.IO.File]::ReadAllText($TemplatePath)
+}
+
+function ConvertTo-RewrittenTemplate {
+    param(
+        [Parameter(Mandatory)][string]$TemplatePath,
+        [Parameter(Mandatory)][hashtable]$Replacements,
+        [string[]]$ForbiddenAfterRewrite = @(),
+        [string[]]$AllowEmptyReplacement = @()
+    )
+    $raw = Read-TemplateText -TemplatePath $TemplatePath
+    return ConvertTo-RewrittenText -Text $raw -TemplatePath $TemplatePath -Replacements $Replacements `
+        -ForbiddenAfterRewrite $ForbiddenAfterRewrite -AllowEmptyReplacement $AllowEmptyReplacement
+}
+
+# Drops the one Capybara line that carries the optional default pair, for a
+# user who leaves it unset. Requiring exactly one line keeps a half removed
+# instruction from reaching an installed copy.
+function Remove-DefaultSubagentLine {
+    param(
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Text,
+        [Parameter(Mandatory)][string]$TemplatePath
+    )
+    $linePattern = '(?m)^.*' + [regex]::Escape($DefaultSubagentModelPlaceholder) + '.*(?:\r?\n|$)'
+    $lineMatches = [regex]::Matches($Text, $linePattern)
+    if ($lineMatches.Count -ne 1) {
+        throw "The template $TemplatePath must hold $DefaultSubagentModelPlaceholder on exactly one line, found $($lineMatches.Count). Restore the shipped template, then re-run."
+    }
+    if (-not $lineMatches[0].Value.Contains($DefaultSubagentEffortPlaceholder)) {
+        throw "The template $TemplatePath does not hold $DefaultSubagentEffortPlaceholder on the same line as $DefaultSubagentModelPlaceholder. Restore the shipped template, then re-run."
+    }
+    return [regex]::Replace($Text, $linePattern, '')
 }
 
 function Get-RewrittenHookJson {
@@ -660,18 +791,30 @@ function Get-RewrittenAgentFile {
         [Parameter(Mandatory)][string]$AgentFileName,
         [Parameter(Mandatory)][hashtable]$Settings
     )
+    $raw = Read-TemplateText -TemplatePath $AgentFilePath
     $replacements = @{
         $OwlModelPlaceholder = $Settings.OwlModel
         $OwlEffortPlaceholder = $Settings.OwlEffort
     }
+    $forbidden = @()
     if ($AgentFileName -eq $CapybaraDuoFile) {
         # Cat values have no meaning in Duo mode, so a Cat token that leaks
         # into the template is forbidden, not filled.
-        return ConvertTo-RewrittenTemplate -TemplatePath $AgentFilePath -Replacements $replacements -ForbiddenAfterRewrite @($CatModelPlaceholder, $CatEffortPlaceholder)
+        $forbidden = @($CatModelPlaceholder, $CatEffortPlaceholder)
     }
-    $replacements[$CatModelPlaceholder] = $Settings.CatModel
-    $replacements[$CatEffortPlaceholder] = $Settings.CatEffort
-    return ConvertTo-RewrittenTemplate -TemplatePath $AgentFilePath -Replacements $replacements
+    else {
+        $replacements[$CatModelPlaceholder] = $Settings.CatModel
+        $replacements[$CatEffortPlaceholder] = $Settings.CatEffort
+    }
+    if ([string]::IsNullOrWhiteSpace($Settings.DefaultSubagentModel)) {
+        $raw = Remove-DefaultSubagentLine -Text $raw -TemplatePath $AgentFilePath
+        $forbidden += @($DefaultSubagentModelPlaceholder, $DefaultSubagentEffortPlaceholder)
+    }
+    else {
+        $replacements[$DefaultSubagentModelPlaceholder] = $Settings.DefaultSubagentModel
+        $replacements[$DefaultSubagentEffortPlaceholder] = $Settings.DefaultSubagentEffort
+    }
+    return ConvertTo-RewrittenText -Text $raw -TemplatePath $AgentFilePath -Replacements $replacements -ForbiddenAfterRewrite $forbidden
 }
 
 # Returns the install or uninstall operations for one hook: its rewritten
@@ -705,8 +848,10 @@ function Get-HookOperationOps {
     $scriptTargetRoot = Join-Path $Targets.Scripts $HookName
     foreach ($sourceFile in Get-SourceFiles -SourceFolder $scriptSourceRoot) {
         $relativePath = Get-RelativePathBelow -FullPath $sourceFile.FullName -BasePath $scriptSourceRoot
-        # Only the guard itself embeds the reviewer values. The battery beside
-        # it stays verbatim because it reads the constants from the script.
+        # Only the guard itself embeds the reviewer values and the default
+        # subagent pair, and the battery beside it stays verbatim because it
+        # reads the constants from the script. The pair may be empty, which is
+        # how an opted-out install records that it checks nothing there.
         $rewrittenContent = $null
         if ($ActionValue -eq 'install' -and
             $HookName -eq $HookSubagentGuardName -and
@@ -716,7 +861,9 @@ function Get-HookOperationOps {
                 $OwlEffortPlaceholder = $ReviewerSettings.OwlEffort
                 $CatModelPlaceholder = $ReviewerSettings.CatModel
                 $CatEffortPlaceholder = $ReviewerSettings.CatEffort
-            }
+                $DefaultSubagentModelPlaceholder = $ReviewerSettings.DefaultSubagentModel
+                $DefaultSubagentEffortPlaceholder = $ReviewerSettings.DefaultSubagentEffort
+            } -AllowEmptyReplacement @($DefaultSubagentModelPlaceholder, $DefaultSubagentEffortPlaceholder)
         }
         $hookOps += @{
             Component = 'hooks'
@@ -1180,6 +1327,12 @@ try {
         if (-not [string]::IsNullOrWhiteSpace($menuChoices.ReviewerSettings.CatEffort)) {
             $CatReasoningEffort = $menuChoices.ReviewerSettings.CatEffort
         }
+        if (-not [string]::IsNullOrWhiteSpace($menuChoices.ReviewerSettings.DefaultSubagentModel)) {
+            $DefaultSubagentModel = $menuChoices.ReviewerSettings.DefaultSubagentModel
+        }
+        if (-not [string]::IsNullOrWhiteSpace($menuChoices.ReviewerSettings.DefaultSubagentEffort)) {
+            $DefaultSubagentReasoningEffort = $menuChoices.ReviewerSettings.DefaultSubagentEffort
+        }
         $SubagentGuard = $menuChoices.SubagentGuard
         $TempReportsExclude = $menuChoices.TempReportsExclude
     }
@@ -1215,6 +1368,13 @@ try {
     if ($installingAgents -or ($Action -eq 'install' -and $plan.GuardHookIncluded)) {
         Write-Host ('Owl model: {0} (effort: {1})' -f $reviewerSettings.OwlModel, $reviewerSettings.OwlEffort)
         Write-Host ('Cat model: {0} (effort: {1})' -f $reviewerSettings.CatModel, $reviewerSettings.CatEffort)
+    }
+    if ($Action -eq 'install' -and ($plan.GuardHookIncluded -or $installingAgents)) {
+        $defaultSummary = 'none, non-reviewer calls are not checked'
+        if (-not [string]::IsNullOrWhiteSpace($reviewerSettings.DefaultSubagentModel)) {
+            $defaultSummary = '{0} (effort: {1})' -f $reviewerSettings.DefaultSubagentModel, $reviewerSettings.DefaultSubagentEffort
+        }
+        Write-Host ('Default subagent model: {0}' -f $defaultSummary)
     }
     if ($Action -eq 'install') {
         $guardSummary = 'not included'

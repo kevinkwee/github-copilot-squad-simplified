@@ -24,12 +24,13 @@
 
 $ScriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Installer = Join-Path $ScriptRoot 'install.ps1'
-$SubagentFlags = @(
+$ReviewerFlags = @(
     '-OwlModel', 'piped/GLM 5.3',
     '-OwlReasoningEffort', 'high',
     '-CatModel', 'piped/cat-flash',
     '-CatReasoningEffort', 'low'
 )
+$SubagentFlags = $ReviewerFlags + @('-DefaultSubagentModel', 'piped/default-subagent-model', '-DefaultSubagentReasoningEffort', 'xhigh')
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
@@ -154,6 +155,29 @@ function Invoke-InstallerRun {
     }
     Invoke-InGitSandbox -GitSandbox $GitSandbox -ScriptBlock {
         $output = & $command @hostArguments -File $ExecutablePath @Arguments 2>&1
+        [pscustomobject]@{
+            Output   = ($output | Out-String)
+            ExitCode = $LASTEXITCODE
+        }
+    }
+}
+
+# Runs a script file in a child pwsh inside a fresh git sandbox, so the child
+# cannot reach the real git config, and returns its output and exit code. An
+# empty StdinJson pipes nothing to the script.
+function Invoke-ChildPowerShell {
+    param(
+        [Parameter(Mandatory)][string]$ScriptPath,
+        [AllowEmptyString()][string]$StdinJson = ''
+    )
+    $gitSandbox = New-GitSandbox
+    return Invoke-InGitSandbox -GitSandbox $gitSandbox -ScriptBlock {
+        if ([string]::IsNullOrEmpty($StdinJson)) {
+            $output = & pwsh -NoProfile -ExecutionPolicy Bypass -File $ScriptPath 2>&1
+        }
+        else {
+            $output = $StdinJson | & pwsh -NoProfile -ExecutionPolicy Bypass -File $ScriptPath 2>&1
+        }
         [pscustomobject]@{
             Output   = ($output | Out-String)
             ExitCode = $LASTEXITCODE
@@ -483,7 +507,7 @@ try {
 
     # Case 17: the interactive menu works with piped answers.
     $menuProject = New-TempRoot
-    $menuRun = Invoke-PipedMenuRun -Answers @('1', '1', '2', $menuProject, 'menu/owl-5.3', '5', 'menu/cat-5.3', '3', '1', '1')
+    $menuRun = Invoke-PipedMenuRun -Answers @('1', '1', '2', $menuProject, 'menu/owl-5.3', '5', 'menu/cat-5.3', '3', 'menu/default-subagent', '7', '1', '1')
     Add-Result -Condition ($menuRun.ExitCode -eq 0) -CaseName 'piped menu install exits 0' -FailMessage $menuRun.Output
     Add-Result -Condition (Test-AllFilesExist -Root $menuProject -RelativePaths ($RelativeLayout | ForEach-Object { '.github/' + $_ })) -CaseName 'piped menu install file set' -FailMessage 'expected files are missing'
     $pipedCapybara = Get-Content -LiteralPath (Join-Path $menuProject '.github/agents/Capybara.agent.md') -Raw
@@ -506,7 +530,7 @@ try {
     Add-Result -Condition ($result.ExitCode -eq 1 -and $result.Output.Contains('UserRoot applies only')) -CaseName 'repo level with -UserRoot fails' -FailMessage $result.Output
 
     # Case 20: the piped menu cancels on EOF because Proceed defaults to No.
-    $menuRun = Invoke-PipedMenuRun -Answers @('1', '1', '1', 'menu/owl-5.3', '5', 'menu/cat-5.3', '3', '1')
+    $menuRun = Invoke-PipedMenuRun -Answers @('1', '1', '1', 'menu/owl-5.3', '5', 'menu/cat-5.3', '3', 'menu/default-subagent', '7', '1')
     Add-Result -Condition ($menuRun.ExitCode -eq 0 -and $menuRun.Output.Contains('Cancelled. No changes were made.')) -CaseName 'piped menu cancels when Proceed is unanswered' -FailMessage $menuRun.Output
 
     # Case 21: an agents-only uninstall removes the agents and the guard that
@@ -551,7 +575,7 @@ try {
 
     # Case 27: the menu accepts a multi-select component answer.
     $menuMultiProject = New-TempRoot
-    $multiMenuRun = Invoke-PipedMenuRun -Answers @('1', '2,3', '2', $menuMultiProject, 'menu/owl-5.3', '5', 'menu/cat-5.3', '3', '1', '1')
+    $multiMenuRun = Invoke-PipedMenuRun -Answers @('1', '2,3', '2', $menuMultiProject, 'menu/owl-5.3', '5', 'menu/cat-5.3', '3', 'menu/default-subagent', '7', '1', '1')
     Add-Result -Condition ($multiMenuRun.ExitCode -eq 0) -CaseName 'piped menu multi-select exits 0' -FailMessage $multiMenuRun.Output
     $repoMultiLayout = $RelativeLayout[0..9] | ForEach-Object { '.github/' + $_ }
     Add-Result -Condition (Test-AllFilesExist -Root $menuMultiProject -RelativePaths $repoMultiLayout) -CaseName 'piped menu multi-select file set' -FailMessage 'expected files are missing'
@@ -559,7 +583,7 @@ try {
 
     # Case 28: a comma-only menu answer re-prompts without consuming the next answer.
     $commaPromptProject = New-TempRoot
-    $commaPromptRun = Invoke-PipedMenuRun -Answers @('1', ',', '2,3', '2', $commaPromptProject, 'menu/owl-5.3', '5', 'menu/cat-5.3', '3', '1', '1')
+    $commaPromptRun = Invoke-PipedMenuRun -Answers @('1', ',', '2,3', '2', $commaPromptProject, 'menu/owl-5.3', '5', 'menu/cat-5.3', '3', 'menu/default-subagent', '7', '1', '1')
     Add-Result -Condition ($commaPromptRun.ExitCode -eq 0) -CaseName 'comma-only menu answer re-prompts cleanly' -FailMessage $commaPromptRun.Output
     Add-Result -Condition ($commaPromptRun.Output.Contains('Components: agents, skills')) -CaseName 'comma-only answer recovers to the selection' -FailMessage $commaPromptRun.Output
     Add-Result -Condition (Test-Path -LiteralPath (Join-Path $commaPromptProject '.github/agents/Capybara.agent.md') -PathType Leaf) -CaseName 'prompted answer still installs' -FailMessage 'agent was not installed'
@@ -595,9 +619,13 @@ try {
     $installedGuardOk = $installedGuardScript.Contains("`$OwlModel = 'piped/GLM 5.3'") -and
         $installedGuardScript.Contains("`$OwlReasoningEffort = 'high'") -and
         $installedGuardScript.Contains("`$CatModel = 'piped/cat-flash'") -and
-        $installedGuardScript.Contains("`$CatReasoningEffort = 'low'")
+        $installedGuardScript.Contains("`$CatReasoningEffort = 'low'") -and
+        $installedGuardScript.Contains("`$DefaultSubagentModel = 'piped/default-subagent-model'") -and
+        $installedGuardScript.Contains("`$DefaultSubagentReasoningEffort = 'xhigh'")
     Add-Result -Condition ($installedGuardOk) -CaseName 'installer embeds the reviewer values in the guard script' -FailMessage $installedGuardScript
-    Add-Result -Condition (-not $installedGuardScript.Contains('__OWL_') -and -not $installedGuardScript.Contains('__CAT_')) -CaseName 'installed guard script has no placeholders' -FailMessage 'a leftover placeholder survived'
+    Add-Result -Condition (-not $installedGuardScript.Contains('__OWL_') -and -not $installedGuardScript.Contains('__CAT_') -and -not $installedGuardScript.Contains('__DEFAULT_')) -CaseName 'installed guard script has no placeholders' -FailMessage 'a leftover placeholder survived'
+    $pipedDefaultPairOk = $capybaraInstalled.Contains('piped/default-subagent-model') -and $capybaraInstalled.Contains('`xhigh`') -and $duoInstalled.Contains('piped/default-subagent-model')
+    Add-Result -Condition ($pipedDefaultPairOk) -CaseName 'installer fills the default pair in the Capybara prompts' -FailMessage $capybaraInstalled
 
     # Case 31: the subagent flags fail fast outside an agents install.
     $skillsOnlyRoot = New-TempRoot
@@ -630,14 +658,14 @@ try {
     # Case 34: an empty answer at a subagent prompt re-prompts, and the next
     # piped value is used.
     $retryProject = New-TempRoot
-    $retryRun = Invoke-PipedMenuRun -Answers @('1', '1', '2', $retryProject, '', 'menu/owl-5.3', '5', 'menu/cat-5.3', '3', '1', '1')
+    $retryRun = Invoke-PipedMenuRun -Answers @('1', '1', '2', $retryProject, '', 'menu/owl-5.3', '5', 'menu/cat-5.3', '3', 'menu/default-subagent', '7', '1', '1')
     Add-Result -Condition ($retryRun.ExitCode -eq 0 -and $retryRun.Output.Contains('Please enter a non-empty value.')) -CaseName 'empty prompt answer re-prompts and exits 0' -FailMessage $retryRun.Output
     $retryCapybara = Get-Content -LiteralPath (Join-Path $retryProject '.github/agents/Capybara.agent.md') -Raw
     $retryFillOk = $retryCapybara.Contains('menu/owl-5.3') -and $retryCapybara.Contains('reasoning effort set to `high`') -and $retryCapybara.Contains('menu/cat-5.3') -and $retryCapybara.Contains('reasoning effort set to `low`') -and (-not $retryCapybara.Contains('__OWL_')) -and (-not $retryCapybara.Contains('__CAT_'))
     Add-Result -Condition ($retryFillOk) -CaseName 'empty prompt answer uses the next piped value' -FailMessage $retryCapybara
 
     # Case 35: a user-level piped menu install lands in the sandbox profile.
-    $userMenuRun = Invoke-PipedMenuRun -Answers @('1', '1', '1', 'menu/owl-5.3', '5', 'menu/cat-5.3', '3', '1', '1')
+    $userMenuRun = Invoke-PipedMenuRun -Answers @('1', '1', '1', 'menu/owl-5.3', '5', 'menu/cat-5.3', '3', 'menu/default-subagent', '7', '1', '1')
     Add-Result -Condition ($userMenuRun.ExitCode -eq 0) -CaseName 'user-level piped menu install exits 0' -FailMessage $userMenuRun.Output
     $sandboxCapybara = Get-Content -LiteralPath (Join-Path $userMenuRun.UserProfile '.copilot/agents/Capybara.agent.md') -Raw
     $sandboxFillOk = $sandboxCapybara.Contains('menu/owl-5.3') -and $sandboxCapybara.Contains('reasoning effort set to `high`') -and $sandboxCapybara.Contains('menu/cat-5.3') -and $sandboxCapybara.Contains('reasoning effort set to `low`') -and (-not $sandboxCapybara.Contains('__OWL_')) -and (-not $sandboxCapybara.Contains('__CAT_'))
@@ -665,7 +693,7 @@ try {
     Add-Result -Condition ((Get-InstalledFileCount -Root $partialFlagsRoot) -eq 0) -CaseName 'partial subagent flag set writes nothing' -FailMessage 'files were created'
 
     # Case 38: a piped menu install whose components exclude agents skips the
-    # four subagent questions and installs only the selected component.
+    # subagent model questions and installs only the selected component.
     $skillsMenuProject = New-TempRoot
     $skillsMenuRun = Invoke-PipedMenuRun -Answers @('1', '3', '2', $skillsMenuProject, '1')
     Add-Result -Condition ($skillsMenuRun.ExitCode -eq 0 -and (-not $skillsMenuRun.Output.Contains('Which model should Owl run on?'))) -CaseName 'menu without the agents component skips the subagent questions' -FailMessage $skillsMenuRun.Output
@@ -676,7 +704,7 @@ try {
     # uninstalling agents later still targets the guard files (they report
     # absent instead of erroring).
     $skipRoot = New-TempRoot
-    $result = Invoke-InstallerRun -Arguments (@('-Action', 'install', '-Components', 'agents', '-Level', 'user', '-UserRoot', $skipRoot, '-SubagentGuard', 'Skip') + $SubagentFlags)
+    $result = Invoke-InstallerRun -Arguments (@('-Action', 'install', '-Components', 'agents', '-Level', 'user', '-UserRoot', $skipRoot, '-SubagentGuard', 'Skip') + $ReviewerFlags)
     Add-Result -Condition ($result.ExitCode -eq 0 -and $result.Output.Contains('Subagent delegation guard: not included')) -CaseName 'SubagentGuard Skip exits 0' -FailMessage $result.Output
     Add-Result -Condition (Test-AllFilesExist -Root $skipRoot -RelativePaths $RelativeLayout[0..3]) -CaseName 'SubagentGuard Skip installs the agents' -FailMessage 'agent files are missing'
     Add-Result -Condition ((Get-InstalledFileCount -Root $skipRoot) -eq 4) -CaseName 'SubagentGuard Skip writes no guard files' -FailMessage 'guard files were created'
@@ -694,10 +722,13 @@ try {
     $forceGuardOk = $forceGuardScript.Contains("`$OwlModel = 'piped/GLM 5.3'") -and
         $forceGuardScript.Contains("`$OwlReasoningEffort = 'high'") -and
         $forceGuardScript.Contains("`$CatModel = 'piped/cat-flash'") -and
-        $forceGuardScript.Contains("`$CatReasoningEffort = 'low'")
+        $forceGuardScript.Contains("`$CatReasoningEffort = 'low'") -and
+        $forceGuardScript.Contains("`$DefaultSubagentModel = 'piped/default-subagent-model'") -and
+        $forceGuardScript.Contains("`$DefaultSubagentReasoningEffort = 'xhigh'")
     Add-Result -Condition ($forceGuardOk) -CaseName 'hooks-only guard embeds the reviewer values' -FailMessage $forceGuardScript
     $forceSummaryOk = $result.Output.Contains('Owl model: piped/GLM 5.3 (effort: high)') -and
-        $result.Output.Contains('Cat model: piped/cat-flash (effort: low)')
+        $result.Output.Contains('Cat model: piped/cat-flash (effort: low)') -and
+        $result.Output.Contains('Default subagent model: piped/default-subagent-model')
     Add-Result -Condition ($forceSummaryOk) -CaseName 'hooks-only guard summary reports the reviewer values' -FailMessage $result.Output
     $result = Invoke-InstallerRun -Arguments @('-Action', 'uninstall', '-Components', 'hooks', '-Level', 'user', '-UserRoot', $forceRoot)
     Add-Result -Condition ($result.ExitCode -eq 0 -and $result.Output.Contains('Done: 6 removed, 0 absent, 0 leftover(s) reported.')) -CaseName 'forced guard uninstall summary' -FailMessage $result.Output
@@ -713,15 +744,18 @@ try {
     Add-Result -Condition ($result.ExitCode -eq 1 -and (ConvertTo-ComparableOutput $result.Output).Contains('applies only to install runs')) -CaseName 'SubagentGuard Force fails on an uninstall run' -FailMessage $result.Output
 
     # Case 42: a piped menu hooks-only install can force the guard in, and the
-    # menu collects all four reviewer values for it.
-    $menuHooksRun = Invoke-PipedMenuRun -Answers @('1', '4', '1', '2', 'menu/owl-5.3', '5', 'menu/cat-5.3', '3', '1')
+    # menu collects the four reviewer values and the default subagent model
+    # for it.
+    $menuHooksRun = Invoke-PipedMenuRun -Answers @('1', '4', '1', '2', 'menu/owl-5.3', '5', 'menu/cat-5.3', '3', 'menu/default-subagent', '7', '1')
     Add-Result -Condition ($menuHooksRun.ExitCode -eq 0 -and $menuHooksRun.Output.Contains('Subagent delegation guard: included')) -CaseName 'piped menu hooks-only includes the guard on demand' -FailMessage $menuHooksRun.Output
     Add-Result -Condition (Test-AllFilesExist -Root (Join-Path $menuHooksRun.UserProfile '.copilot') -RelativePaths ($RelativeLayout[10..12] + $SubagentGuardLayout)) -CaseName 'piped menu guarded hooks file set' -FailMessage 'hook or guard files are missing'
     $menuHooksGuardScript = Get-Content -LiteralPath (Join-Path $menuHooksRun.UserProfile '.copilot/scripts/guard-subagent-delegation/guard-subagent-delegation.ps1') -Raw
     $menuHooksGuardOk = $menuHooksGuardScript.Contains("`$OwlModel = 'menu/owl-5.3'") -and
         $menuHooksGuardScript.Contains("`$OwlReasoningEffort = 'high'") -and
         $menuHooksGuardScript.Contains("`$CatModel = 'menu/cat-5.3'") -and
-        $menuHooksGuardScript.Contains("`$CatReasoningEffort = 'low'")
+        $menuHooksGuardScript.Contains("`$CatReasoningEffort = 'low'") -and
+        $menuHooksGuardScript.Contains("`$DefaultSubagentModel = 'menu/default-subagent'") -and
+        $menuHooksGuardScript.Contains("`$DefaultSubagentReasoningEffort = 'max'")
     Add-Result -Condition ($menuHooksGuardOk) -CaseName 'piped menu hooks-only guard embeds the reviewer values' -FailMessage $menuHooksGuardScript
 
     # Case 43: the same menu run with the default answer leaves the guard out.
@@ -770,7 +804,7 @@ try {
     # Case 47: an out-of-range effort menu answer re-prompts and the next
     # valid answer is used.
     $effortRetryProject = New-TempRoot
-    $effortRetryRun = Invoke-PipedMenuRun -Answers @('1', '1', '2', $effortRetryProject, 'menu/owl-5.3', '99', '5', 'menu/cat-5.3', '3', '1', '1')
+    $effortRetryRun = Invoke-PipedMenuRun -Answers @('1', '1', '2', $effortRetryProject, 'menu/owl-5.3', '99', '5', 'menu/cat-5.3', '3', 'menu/default-subagent', '7', '1', '1')
     Add-Result -Condition ($effortRetryRun.ExitCode -eq 0 -and $effortRetryRun.Output.Contains('Please enter a number from the list.')) -CaseName 'invalid effort menu answer re-prompts' -FailMessage $effortRetryRun.Output
     $effortRetryCapybara = Get-Content -LiteralPath (Join-Path $effortRetryProject '.github/agents/Capybara.agent.md') -Raw
     Add-Result -Condition ($effortRetryCapybara.Contains('reasoning effort set to `high`')) -CaseName 'invalid effort menu answer uses the next valid choice' -FailMessage $effortRetryCapybara
@@ -822,22 +856,24 @@ try {
     # Case 52: reinstalling with different reviewer values updates the guard
     # script rather than leaving the first values in place.
     $reinstallRoot = New-TempRoot
-    $firstFlags = @('-OwlModel', 'first/owl', '-OwlReasoningEffort', 'low', '-CatModel', 'first/cat', '-CatReasoningEffort', 'minimal')
+    $firstFlags = @('-OwlModel', 'first/owl', '-OwlReasoningEffort', 'low', '-CatModel', 'first/cat', '-CatReasoningEffort', 'minimal', '-DefaultSubagentModel', 'first/default', '-DefaultSubagentReasoningEffort', 'max')
     $null = Invoke-InstallerRun -Arguments (@('-Action', 'install', '-Components', 'agents', '-Level', 'user', '-UserRoot', $reinstallRoot) + $firstFlags)
-    $secondFlags = @('-OwlModel', 'second/owl', '-OwlReasoningEffort', 'max', '-CatModel', 'second/cat', '-CatReasoningEffort', 'xhigh')
+    $secondFlags = @('-OwlModel', 'second/owl', '-OwlReasoningEffort', 'max', '-CatModel', 'second/cat', '-CatReasoningEffort', 'xhigh', '-DefaultSubagentModel', 'second/default', '-DefaultSubagentReasoningEffort', 'low')
     $result = Invoke-InstallerRun -Arguments (@('-Action', 'install', '-Components', 'agents', '-Level', 'user', '-UserRoot', $reinstallRoot) + $secondFlags)
     $reinstallGuardScript = Get-Content -LiteralPath (Join-Path $reinstallRoot 'scripts/guard-subagent-delegation/guard-subagent-delegation.ps1') -Raw
     $reinstallGuardOk = $reinstallGuardScript.Contains("`$OwlModel = 'second/owl'") -and
         $reinstallGuardScript.Contains("`$OwlReasoningEffort = 'max'") -and
         $reinstallGuardScript.Contains("`$CatModel = 'second/cat'") -and
-        $reinstallGuardScript.Contains("`$CatReasoningEffort = 'xhigh'")
+        $reinstallGuardScript.Contains("`$CatReasoningEffort = 'xhigh'") -and
+        $reinstallGuardScript.Contains("`$DefaultSubagentModel = 'second/default'") -and
+        $reinstallGuardScript.Contains("`$DefaultSubagentReasoningEffort = 'low'")
     Add-Result -Condition ($result.ExitCode -eq 0 -and $reinstallGuardOk) -CaseName 'reinstall with new values updates the guard script' -FailMessage $reinstallGuardScript
-    Add-Result -Condition (-not $reinstallGuardScript.Contains('__OWL_') -and -not $reinstallGuardScript.Contains('__CAT_')) -CaseName 'reinstalled guard script has no placeholders' -FailMessage 'a leftover placeholder survived'
+    Add-Result -Condition (-not $reinstallGuardScript.Contains('__OWL_') -and -not $reinstallGuardScript.Contains('__CAT_') -and -not $reinstallGuardScript.Contains('__DEFAULT_')) -CaseName 'reinstalled guard script has no placeholders' -FailMessage 'a leftover placeholder survived'
 
     # Case 53: effort flags are accepted without regard to case and stored in
     # lowercase.
     $caseEffortRoot = New-TempRoot
-    $result = Invoke-InstallerRun -Arguments @('-Action', 'install', '-Components', 'agents', '-Level', 'user', '-UserRoot', $caseEffortRoot, '-OwlModel', 'm', '-OwlReasoningEffort', 'HIGH', '-CatModel', 'c', '-CatReasoningEffort', 'Low')
+    $result = Invoke-InstallerRun -Arguments @('-Action', 'install', '-Components', 'agents', '-Level', 'user', '-UserRoot', $caseEffortRoot, '-OwlModel', 'm', '-OwlReasoningEffort', 'HIGH', '-CatModel', 'c', '-CatReasoningEffort', 'Low', '-DefaultSubagentModel', 'd', '-DefaultSubagentReasoningEffort', 'max')
     $caseGuardScript = Get-Content -LiteralPath (Join-Path $caseEffortRoot 'scripts/guard-subagent-delegation/guard-subagent-delegation.ps1') -Raw
     $caseGuardOk = $result.ExitCode -eq 0 -and
         $caseGuardScript.Contains("`$OwlReasoningEffort = 'high'") -and
@@ -847,26 +883,26 @@ try {
     # Case 54: a model value with a single quote is rejected because the guard
     # embeds model values in single-quoted PowerShell literals.
     $quotedModelRoot = New-TempRoot
-    $result = Invoke-InstallerRun -Arguments @('-Action', 'install', '-Components', 'agents', '-Level', 'user', '-UserRoot', $quotedModelRoot, '-OwlModel', "o'brien", '-OwlReasoningEffort', 'high', '-CatModel', 'c', '-CatReasoningEffort', 'low')
+    $result = Invoke-InstallerRun -Arguments @('-Action', 'install', '-Components', 'agents', '-Level', 'user', '-UserRoot', $quotedModelRoot, '-OwlModel', "o'brien", '-OwlReasoningEffort', 'high', '-CatModel', 'c', '-CatReasoningEffort', 'low', '-DefaultSubagentModel', 'd', '-DefaultSubagentReasoningEffort', 'max')
     Add-Result -Condition ($result.ExitCode -eq 1 -and (ConvertTo-ComparableOutput $result.Output).Contains('cannot contain a single quote')) -CaseName 'model with a single quote is rejected' -FailMessage $result.Output
     Add-Result -Condition ((Get-InstalledFileCount -Root $quotedModelRoot) -eq 0) -CaseName 'model with a single quote writes nothing' -FailMessage 'files were created'
 
     # Case 55: a model value with a line feed is rejected.
     $newlineModelRoot = New-TempRoot
-    $result = Invoke-InstallerRun -Arguments @('-Action', 'install', '-Components', 'agents', '-Level', 'user', '-UserRoot', $newlineModelRoot, '-OwlModel', "line`nbreak", '-OwlReasoningEffort', 'high', '-CatModel', 'c', '-CatReasoningEffort', 'low')
+    $result = Invoke-InstallerRun -Arguments @('-Action', 'install', '-Components', 'agents', '-Level', 'user', '-UserRoot', $newlineModelRoot, '-OwlModel', "line`nbreak", '-OwlReasoningEffort', 'high', '-CatModel', 'c', '-CatReasoningEffort', 'low', '-DefaultSubagentModel', 'd', '-DefaultSubagentReasoningEffort', 'max')
     Add-Result -Condition ($result.ExitCode -eq 1 -and (ConvertTo-ComparableOutput $result.Output).Contains('cannot contain a single quote')) -CaseName 'model with a line feed is rejected' -FailMessage $result.Output
     Add-Result -Condition ((Get-InstalledFileCount -Root $newlineModelRoot) -eq 0) -CaseName 'model with a line feed writes nothing' -FailMessage 'files were created'
 
     # Case 56: a Cat model value shaped like an installer placeholder is
     # rejected, covering the Cat validation path.
     $placeholderModelRoot = New-TempRoot
-    $result = Invoke-InstallerRun -Arguments @('-Action', 'install', '-Components', 'agents', '-Level', 'user', '-UserRoot', $placeholderModelRoot, '-OwlModel', 'm', '-OwlReasoningEffort', 'high', '-CatModel', '__CAT_MODEL__', '-CatReasoningEffort', 'low')
-    Add-Result -Condition ($result.ExitCode -eq 1 -and (ConvertTo-ComparableOutput $result.Output).Contains('cannot be a placeholder')) -CaseName 'placeholder-shaped Cat model is rejected' -FailMessage $result.Output
+    $result = Invoke-InstallerRun -Arguments @('-Action', 'install', '-Components', 'agents', '-Level', 'user', '-UserRoot', $placeholderModelRoot, '-OwlModel', 'm', '-OwlReasoningEffort', 'high', '-CatModel', '__CAT_MODEL__', '-CatReasoningEffort', 'low', '-DefaultSubagentModel', 'd', '-DefaultSubagentReasoningEffort', 'max')
+    Add-Result -Condition ($result.ExitCode -eq 1 -and (ConvertTo-ComparableOutput $result.Output).Contains('or a placeholder such as')) -CaseName 'placeholder-shaped Cat model is rejected' -FailMessage $result.Output
     Add-Result -Condition ((Get-InstalledFileCount -Root $placeholderModelRoot) -eq 0) -CaseName 'placeholder-shaped Cat model writes nothing' -FailMessage 'files were created'
 
     # Case 57: the menu path rejects the same model characters.
     $menuQuotedModelRoot = New-TempRoot
-    $menuQuotedModelRun = Invoke-PipedMenuRun -Answers @('1', '1', '2', $menuQuotedModelRoot, "o'brien", '5', 'menu/cat-5.3', '3', '1', '1')
+    $menuQuotedModelRun = Invoke-PipedMenuRun -Answers @('1', '1', '2', $menuQuotedModelRoot, "o'brien", '5', 'menu/cat-5.3', '3', '1', '1', '1', '1')
     Add-Result -Condition ($menuQuotedModelRun.ExitCode -eq 1 -and (ConvertTo-ComparableOutput $menuQuotedModelRun.Output).Contains('cannot contain a single quote')) -CaseName 'menu model with a single quote is rejected' -FailMessage $menuQuotedModelRun.Output
     Add-Result -Condition ((Get-InstalledFileCount -Root $menuQuotedModelRoot) -eq 0) -CaseName 'menu model with a single quote writes nothing' -FailMessage 'files were created'
 
@@ -1101,12 +1137,12 @@ try {
     # Case 74: the menu asks before adding the entry. Answering no skips it,
     # and the default answer adds it.
     $menuNoSandbox = New-GitSandbox
-    $menuNoRun = Invoke-PipedMenuRun -GitSandbox $menuNoSandbox -Answers @('1', '1', '1', 'menu/owl-5.3', '5', 'menu/cat-5.3', '3', '2', '1')
+    $menuNoRun = Invoke-PipedMenuRun -GitSandbox $menuNoSandbox -Answers @('1', '1', '1', 'menu/owl-5.3', '5', 'menu/cat-5.3', '3', 'menu/default-subagent', '7', '2', '1')
     $menuNoOutput = ConvertTo-ComparableOutput $menuNoRun.Output
     $menuNoOk = $menuNoRun.ExitCode -eq 0 -and $menuNoOutput.Contains("to your global git excludes file ($($menuNoSandbox.DefaultExcludesFile))") -and $menuNoOutput.Contains('skipped (opted out)') -and ($null -eq (Get-SandboxFileText -Path $menuNoSandbox.DefaultExcludesFile))
     Add-Result -Condition $menuNoOk -CaseName 'menu answer no skips the temp reports entry' -FailMessage $menuNoRun.Output
     $menuDefaultSandbox = New-GitSandbox
-    $menuDefaultRun = Invoke-PipedMenuRun -GitSandbox $menuDefaultSandbox -Answers @('1', '1', '1', 'menu/owl-5.3', '5', 'menu/cat-5.3', '3', '', '1')
+    $menuDefaultRun = Invoke-PipedMenuRun -GitSandbox $menuDefaultSandbox -Answers @('1', '1', '1', 'menu/owl-5.3', '5', 'menu/cat-5.3', '3', 'menu/default-subagent', '7', '', '1')
     $menuDefaultExcludes = Get-SandboxFileText -Path $menuDefaultSandbox.DefaultExcludesFile
     Add-Result -Condition ($menuDefaultRun.ExitCode -eq 0 -and ($menuDefaultExcludes -ceq $expectedExcludeEntry)) -CaseName 'menu default answer adds the temp reports entry' -FailMessage "$($menuDefaultRun.Output) excludes file: '$menuDefaultExcludes'"
 
@@ -1246,6 +1282,270 @@ try {
     $null = Invoke-InstallerRun -GitSandbox $indentedSandbox -Arguments (@('-Action', 'install', '-Components', 'agents', '-Level', 'user', '-UserRoot', (New-TempRoot)) + $SubagentFlags)
     $indentedAfterInstall = Get-SandboxFileText -Path $indentedSandbox.DefaultExcludesFile
     Add-Result -Condition ($indentedAfterInstall -ceq ($indentedContent + $expectedExcludeEntry)) -CaseName 'indented user line still gets the installer entry' -FailMessage "excludes file: '$indentedAfterInstall'"
+
+    # Case 87: the installed guard denies a subagent call that names no model,
+    # and the deny names the installed default pair. A call that names a model
+    # which does not contain the configured value, plus any effort, is allowed
+    # untouched.
+    $denyRoot = New-TempRoot
+    $null = Invoke-InstallerRun -Arguments (@('-Action', 'install', '-Components', 'agents', '-Level', 'user', '-UserRoot', $denyRoot) + $SubagentFlags)
+    $installedGuardPath = Join-Path $denyRoot 'scripts/guard-subagent-delegation/guard-subagent-delegation.ps1'
+    $noModelHookInput = (@{
+        hook_event_name = 'PreToolUse'
+        session_id      = 'test-session'
+        timestamp       = '2026-11-03T01:00:00Z'
+        cwd             = 'C:\repo'
+        tool_name       = 'task'
+        tool_input      = @{ agent_type = 'explore'; prompt = 'inventory'; mode = 'sync' }
+    } | ConvertTo-Json -Depth 8 -Compress)
+    $denyRun = Invoke-ChildPowerShell -ScriptPath $installedGuardPath -StdinJson $noModelHookInput
+    $denyOutput = $denyRun.Output
+    Add-Result -Condition ($denyOutput.Contains('"permissionDecision":"deny"') -and
+        $denyOutput.Contains('piped/default-subagent-model') -and
+        $denyOutput.Contains('xhigh')) -CaseName 'installed guard denies a call that names no model' -FailMessage $denyOutput
+    $ownModelHookInput = (@{
+        hook_event_name = 'PreToolUse'
+        session_id      = 'test-session'
+        timestamp       = '2026-11-03T01:00:00Z'
+        cwd             = 'C:\repo'
+        tool_name       = 'task'
+        tool_input      = @{ agent_type = 'explore'; prompt = 'inventory'; model = 'piped/other'; reasoning_effort = 'low' }
+    } | ConvertTo-Json -Depth 8 -Compress)
+    $ownModelOutput = (Invoke-ChildPowerShell -ScriptPath $installedGuardPath -StdinJson $ownModelHookInput).Output
+    Add-Result -Condition ([string]::IsNullOrWhiteSpace($ownModelOutput)) -CaseName 'installed guard leaves a named model untouched' -FailMessage $ownModelOutput
+
+    # Case 88: the default subagent model is embedded in a single-quoted
+    # literal, so a single quote is rejected like the reviewer values.
+    $quotedDefaultRoot = New-TempRoot
+    $result = Invoke-InstallerRun -Arguments (@('-Action', 'install', '-Components', 'agents', '-Level', 'user', '-UserRoot', $quotedDefaultRoot, '-DefaultSubagentModel', "o'brien", '-DefaultSubagentReasoningEffort', 'max') + $ReviewerFlags)
+    Add-Result -Condition ($result.ExitCode -eq 1 -and (ConvertTo-ComparableOutput $result.Output).Contains('The default subagent model value cannot contain a single quote')) -CaseName 'default subagent model with a single quote is rejected' -FailMessage $result.Output
+    Add-Result -Condition ((Get-InstalledFileCount -Root $quotedDefaultRoot) -eq 0) -CaseName 'default subagent model with a single quote writes nothing' -FailMessage 'files were created'
+
+    # Case 89: the pair also reaches the Capybara templates, so an install that
+    # skips the guard still carries the instruction and the values.
+    $skipDefaultRoot = New-TempRoot
+    $result = Invoke-InstallerRun -Arguments (@('-Action', 'install', '-Components', 'agents', '-Level', 'user', '-UserRoot', $skipDefaultRoot, '-SubagentGuard', 'Skip', '-DefaultSubagentModel', 'piped/skip-default', '-DefaultSubagentReasoningEffort', 'high') + $ReviewerFlags)
+    Add-Result -Condition ($result.ExitCode -eq 0) -CaseName 'agents-only install accepts the default pair' -FailMessage $result.Output
+    $skipDefaultCapybara = Get-Content -LiteralPath (Join-Path $skipDefaultRoot 'agents/Capybara.agent.md') -Raw
+    Add-Result -Condition ($skipDefaultCapybara.Contains('piped/skip-default') -and $skipDefaultCapybara.Contains('`high`') -and -not $skipDefaultCapybara.Contains('__DEFAULT_')) -CaseName 'agents-only install writes the default pair into the Capybara prompt' -FailMessage $skipDefaultCapybara
+
+    # Case 90: a guard template missing the default subagent model
+    # placeholder aborts before any file is written.
+    $guardDefaultTemplateRoot = New-TempRoot
+    foreach ($repoFolder in 'agents', 'skills', 'hooks', 'scripts') {
+        Copy-Item -LiteralPath (Join-Path $ScriptRoot $repoFolder) -Destination (Join-Path $guardDefaultTemplateRoot $repoFolder) -Recurse
+    }
+    Copy-Item -LiteralPath $Installer -Destination $guardDefaultTemplateRoot
+    $mutatedDefaultPath = Join-Path $guardDefaultTemplateRoot 'scripts/guard-subagent-delegation/guard-subagent-delegation.ps1'
+    (Get-Content -LiteralPath $mutatedDefaultPath -Raw).Replace('__DEFAULT_SUBAGENT_MODEL__', '') |
+        Set-Content -LiteralPath $mutatedDefaultPath -NoNewline
+    $abortedDefaultRoot = New-TempRoot
+    $result = Invoke-InstallerRun -ExecutablePath (Join-Path $guardDefaultTemplateRoot 'install.ps1') -Arguments (@('-Action', 'install', '-Components', 'agents', '-Level', 'user', '-UserRoot', $abortedDefaultRoot) + $SubagentFlags)
+    Add-Result -Condition ($result.ExitCode -eq 1 -and (ConvertTo-ComparableOutput $result.Output).Contains('does not contain the expected placeholder')) -CaseName 'guard template without a default model placeholder aborts' -FailMessage $result.Output
+    Add-Result -Condition ((Get-InstalledFileCount -Root $abortedDefaultRoot) -eq 0) -CaseName 'guard template without a default model placeholder writes nothing' -FailMessage 'files were created'
+
+    # Case 91: the menu asks for the default subagent model alongside the
+    # reviewer values, and asks for its effort only when a model was given.
+    Add-Result -Condition ($menuHooksRun.Output.Contains('Which model should other subagent calls name unless the user picks one?')) -CaseName 'menu asks for the default subagent model' -FailMessage $menuHooksRun.Output
+    Add-Result -Condition ($menuHooksRun.Output.Contains('Which reasoning effort should that subagent model use?')) -CaseName 'menu asks for the default subagent effort' -FailMessage $menuHooksRun.Output
+    $menuBlankDefaultRun = Invoke-PipedMenuRun -Answers @('1', '1', '1', 'menu/owl-5.3', '5', 'menu/cat-5.3', '3', '', '1', '1')
+    $menuBlankDefaultGuard = Get-Content -LiteralPath (Join-Path $menuBlankDefaultRun.UserProfile '.copilot/scripts/guard-subagent-delegation/guard-subagent-delegation.ps1') -Raw -ErrorAction SilentlyContinue
+    $menuBlankOk = $menuBlankDefaultRun.ExitCode -eq 0 -and
+        -not $menuBlankDefaultRun.Output.Contains('Which reasoning effort should that subagent model use?') -and
+        $menuBlankDefaultGuard.Contains("`$DefaultSubagentModel = ''")
+    Add-Result -Condition ($menuBlankOk) -CaseName 'blank menu model answer skips the effort question' -FailMessage $menuBlankDefaultRun.Output
+    $menuEnterEffortRun = Invoke-PipedMenuRun -Answers @('1', '1', '1', 'menu/owl-5.3', '5', 'menu/cat-5.3', '3', 'menu/default-subagent', '', '1', '1')
+    $menuEnterEffortGuard = Get-Content -LiteralPath (Join-Path $menuEnterEffortRun.UserProfile '.copilot/scripts/guard-subagent-delegation/guard-subagent-delegation.ps1') -Raw -ErrorAction SilentlyContinue
+    $menuEnterEffortOk = $menuEnterEffortRun.ExitCode -eq 0 -and $menuEnterEffortGuard.Contains("`$DefaultSubagentReasoningEffort = 'max'")
+    Add-Result -Condition ($menuEnterEffortOk) -CaseName 'menu effort question defaults to max' -FailMessage $menuEnterEffortRun.Output
+
+    # Case 92: the pair is optional, so a run with only the reviewer flags
+    # installs, records an empty pair in the guard, and drops the Capybara line
+    # that would otherwise name a model the user never chose.
+    $missingDefaultRoot = New-TempRoot
+    $result = Invoke-InstallerRun -Arguments (@('-Action', 'install', '-Components', 'agents', '-Level', 'user', '-UserRoot', $missingDefaultRoot) + $ReviewerFlags)
+    Add-Result -Condition ($result.ExitCode -eq 0 -and $result.Output.Contains('none, non-reviewer calls are not checked')) -CaseName 'agents install without the default pair succeeds' -FailMessage $result.Output
+    $blankPairGuardScript = Get-Content -LiteralPath (Join-Path $missingDefaultRoot 'scripts/guard-subagent-delegation/guard-subagent-delegation.ps1') -Raw
+    $blankPairOk = $blankPairGuardScript.Contains("`$DefaultSubagentModel = ''") -and
+        $blankPairGuardScript.Contains("`$DefaultSubagentReasoningEffort = ''") -and
+        -not $blankPairGuardScript.Contains('__DEFAULT_')
+    Add-Result -Condition $blankPairOk -CaseName 'agents install without the default pair writes empty guard constants' -FailMessage $blankPairGuardScript
+    $blankPairCapybara = Get-Content -LiteralPath (Join-Path $missingDefaultRoot 'agents/Capybara.agent.md') -Raw
+    $blankPairDuo = Get-Content -LiteralPath (Join-Path $missingDefaultRoot 'agents/CapybaraDuo.agent.md') -Raw
+    Add-Result -Condition (-not $blankPairCapybara.Contains('__DEFAULT_') -and -not $blankPairDuo.Contains('__DEFAULT_') -and
+        -not $blankPairCapybara.Contains('name the first available model that matches')) -CaseName 'agents install without the default pair drops the Capybara line' -FailMessage $blankPairCapybara
+    Add-Result -Condition ($blankPairCapybara.Contains('piped/GLM 5.3') -and $blankPairCapybara.Contains('piped/cat-flash')) -CaseName 'dropping the Capybara line keeps the reviewer values' -FailMessage $blankPairCapybara
+    $missingForcedDefaultRoot = New-TempRoot
+    $result = Invoke-InstallerRun -Arguments (@('-Action', 'install', '-Components', 'hooks', '-Level', 'user', '-UserRoot', $missingForcedDefaultRoot, '-SubagentGuard', 'Force') + $ReviewerFlags)
+    $forcedBlankOk = $result.ExitCode -eq 0 -and (Get-Content -LiteralPath (Join-Path $missingForcedDefaultRoot 'scripts/guard-subagent-delegation/guard-subagent-delegation.ps1') -Raw).Contains("`$DefaultSubagentModel = ''")
+    Add-Result -Condition ($forcedBlankOk) -CaseName 'forced guard install without the default pair writes empty constants' -FailMessage $result.Output
+
+    # Case 92b: a half pair is unenforceable, so each field alone is rejected
+    # before anything is written.
+    $modelOnlyRoot = New-TempRoot
+    $result = Invoke-InstallerRun -Arguments (@('-Action', 'install', '-Components', 'agents', '-Level', 'user', '-UserRoot', $modelOnlyRoot, '-DefaultSubagentModel', 'only/model') + $ReviewerFlags)
+    Add-Result -Condition ($result.ExitCode -eq 1 -and (ConvertTo-ComparableOutput $result.Output).Contains('must be given together')) -CaseName 'default model without its effort is rejected' -FailMessage $result.Output
+    Add-Result -Condition ((Get-InstalledFileCount -Root $modelOnlyRoot) -eq 0) -CaseName 'default model without its effort writes nothing' -FailMessage 'files were created'
+    $effortOnlyRoot = New-TempRoot
+    $result = Invoke-InstallerRun -Arguments (@('-Action', 'install', '-Components', 'agents', '-Level', 'user', '-UserRoot', $effortOnlyRoot, '-DefaultSubagentReasoningEffort', 'high') + $ReviewerFlags)
+    Add-Result -Condition ($result.ExitCode -eq 1 -and (ConvertTo-ComparableOutput $result.Output).Contains('must be given together')) -CaseName 'default effort without its model is rejected' -FailMessage $result.Output
+    Add-Result -Condition ((Get-InstalledFileCount -Root $effortOnlyRoot) -eq 0) -CaseName 'default effort without its model writes nothing' -FailMessage 'files were created'
+    $skillsOnlyPairRoot = New-TempRoot
+    $result = Invoke-InstallerRun -Arguments @('-Action', 'install', '-Components', 'skills', '-Level', 'user', '-UserRoot', $skillsOnlyPairRoot, '-DefaultSubagentModel', 'only/model', '-DefaultSubagentReasoningEffort', 'high')
+    Add-Result -Condition ($result.ExitCode -eq 1 -and (ConvertTo-ComparableOutput $result.Output).Contains('apply only when installing the agents component or the subagent delegation guard')) -CaseName 'default pair fails on a skills-only install' -FailMessage $result.Output
+    Add-Result -Condition ((Get-InstalledFileCount -Root $skillsOnlyPairRoot) -eq 0) -CaseName 'default pair on a skills-only install writes nothing' -FailMessage 'files were created'
+
+    # Case 92c: the installed effort is stored in lowercase whatever its case,
+    # and reaches the guard and the Capybara prompt.
+    $pairCaseRoot = New-TempRoot
+    $result = Invoke-InstallerRun -Arguments (@('-Action', 'install', '-Components', 'agents', '-Level', 'user', '-UserRoot', $pairCaseRoot, '-DefaultSubagentModel', 'case/model', '-DefaultSubagentReasoningEffort', 'XHIGH') + $ReviewerFlags)
+    $pairCaseGuardScript = Get-Content -LiteralPath (Join-Path $pairCaseRoot 'scripts/guard-subagent-delegation/guard-subagent-delegation.ps1') -Raw -ErrorAction SilentlyContinue
+    $pairCaseOk = $result.ExitCode -eq 0 -and $pairCaseGuardScript.Contains("`$DefaultSubagentReasoningEffort = 'xhigh'")
+    Add-Result -Condition ($pairCaseOk) -CaseName 'default effort is normalized to lowercase' -FailMessage $result.Output
+
+    # Case 92d: a template missing the effort placeholder aborts before any
+    # file is written, the same way a missing model placeholder does.
+    $guardEffortTemplateRoot = New-TempRoot
+    foreach ($repoFolder in 'agents', 'skills', 'hooks', 'scripts') {
+        Copy-Item -LiteralPath (Join-Path $ScriptRoot $repoFolder) -Destination (Join-Path $guardEffortTemplateRoot $repoFolder) -Recurse
+    }
+    Copy-Item -LiteralPath $Installer -Destination $guardEffortTemplateRoot
+    $mutatedEffortPath = Join-Path $guardEffortTemplateRoot 'scripts/guard-subagent-delegation/guard-subagent-delegation.ps1'
+    (Get-Content -LiteralPath $mutatedEffortPath -Raw).Replace('__DEFAULT_SUBAGENT_REASONING_EFFORT__', '') |
+        Set-Content -LiteralPath $mutatedEffortPath -NoNewline
+    $abortedEffortRoot = New-TempRoot
+    $result = Invoke-InstallerRun -ExecutablePath (Join-Path $guardEffortTemplateRoot 'install.ps1') -Arguments (@('-Action', 'install', '-Components', 'agents', '-Level', 'user', '-UserRoot', $abortedEffortRoot) + $SubagentFlags)
+    Add-Result -Condition ($result.ExitCode -eq 1 -and (ConvertTo-ComparableOutput $result.Output).Contains('does not contain the expected placeholder')) -CaseName 'guard template without a default effort placeholder aborts' -FailMessage $result.Output
+    Add-Result -Condition ((Get-InstalledFileCount -Root $abortedEffortRoot) -eq 0) -CaseName 'guard template without a default effort placeholder writes nothing' -FailMessage 'files were created'
+
+    # Case 92e: the Capybara templates must hold the pair on one line each, so
+    # a broken template cannot leave a half removed instruction behind.
+    $splitLineTemplateRoot = New-TempRoot
+    foreach ($repoFolder in 'agents', 'skills', 'hooks', 'scripts') {
+        Copy-Item -LiteralPath (Join-Path $ScriptRoot $repoFolder) -Destination (Join-Path $splitLineTemplateRoot $repoFolder) -Recurse
+    }
+    Copy-Item -LiteralPath $Installer -Destination $splitLineTemplateRoot
+    $splitLinePath = Join-Path $splitLineTemplateRoot 'agents/Capybara.agent.md'
+    $splitLineToken = '`__DEFAULT_SUBAGENT_MODEL__`'
+    (Get-Content -LiteralPath $splitLinePath -Raw).Replace($splitLineToken, ($splitLineToken + [Environment]::NewLine)) |
+        Set-Content -LiteralPath $splitLinePath -NoNewline
+    $abortedSplitRoot = New-TempRoot
+    $result = Invoke-InstallerRun -ExecutablePath (Join-Path $splitLineTemplateRoot 'install.ps1') -Arguments (@('-Action', 'install', '-Components', 'agents', '-Level', 'user', '-UserRoot', $abortedSplitRoot) + $ReviewerFlags)
+    Add-Result -Condition ($result.ExitCode -eq 1 -and (ConvertTo-ComparableOutput $result.Output).Contains('on the same line as')) -CaseName 'Capybara template with the default pair split across lines aborts' -FailMessage $result.Output
+    Add-Result -Condition ((Get-InstalledFileCount -Root $abortedSplitRoot) -eq 0) -CaseName 'split default pair writes nothing' -FailMessage 'files were created'
+
+    # Case 92e-2: a template that carries the default model placeholder on two
+    # lines would drop only one of them, so the count check aborts instead.
+    $twoLineTemplateRoot = New-TempRoot
+    foreach ($repoFolder in 'agents', 'skills', 'hooks', 'scripts') {
+        Copy-Item -LiteralPath (Join-Path $ScriptRoot $repoFolder) -Destination (Join-Path $twoLineTemplateRoot $repoFolder) -Recurse
+    }
+    Copy-Item -LiteralPath $Installer -Destination $twoLineTemplateRoot
+    $twoLinePath = Join-Path $twoLineTemplateRoot 'agents/Capybara.agent.md'
+    $twoLineText = [System.IO.File]::ReadAllText($twoLinePath)
+    $twoLineToken = '`__DEFAULT_SUBAGENT_MODEL__`'
+    $twoLineText = $twoLineText.Replace($twoLineToken, ($twoLineToken + [Environment]::NewLine + $twoLineToken))
+    [System.IO.File]::WriteAllText($twoLinePath, $twoLineText)
+    $abortedTwoLineRoot = New-TempRoot
+    $result = Invoke-InstallerRun -ExecutablePath (Join-Path $twoLineTemplateRoot 'install.ps1') -Arguments (@('-Action', 'install', '-Components', 'agents', '-Level', 'user', '-UserRoot', $abortedTwoLineRoot) + $ReviewerFlags)
+    Add-Result -Condition ($result.ExitCode -eq 1 -and (ConvertTo-ComparableOutput $result.Output).Contains('found 2')) -CaseName 'Capybara template with two default model lines aborts' -FailMessage $result.Output
+    Add-Result -Condition ((Get-InstalledFileCount -Root $abortedTwoLineRoot) -eq 0) -CaseName 'two default model lines write nothing' -FailMessage 'files were created'
+
+    # Case 92f: the installed battery must run on an opted-out install, where
+    # the guard holds an empty default pair rather than a usable one.
+    $installedBatteryPath = Join-Path $missingDefaultRoot 'scripts/guard-subagent-delegation/test-guard-subagent-delegation.ps1'
+    $installedBatteryRun = Invoke-ChildPowerShell -ScriptPath $installedBatteryPath
+    $installedBatteryExit = $installedBatteryRun.ExitCode
+    $installedBatteryFailures = @($installedBatteryRun.Output -split "`r?`n" | Where-Object { $_ -match '^FAIL' }).Count
+    Add-Result -Condition ($installedBatteryExit -eq 0 -and $installedBatteryFailures -eq 0) -CaseName 'installed battery runs on an opted-out install' -FailMessage $installedBatteryRun.Output
+
+    # Case 93: PowerShell treats the typographic single quotes as quote
+    # characters, so a value containing one would close the literal in the
+    # installed guard and let the rest run as code.
+    foreach ($quoteCodePoint in 0x2018, 0x2019, 0x201A, 0x201B) {
+        $typographicQuote = [char]$quoteCodePoint
+        $smartQuoteRoot = New-TempRoot
+        $result = Invoke-InstallerRun -Arguments (@('-Action', 'install', '-Components', 'agents', '-Level', 'user', '-UserRoot', $smartQuoteRoot, '-DefaultSubagentModel', ('vendor/x' + $typographicQuote + ' + (Get-Date).Year + ' + $typographicQuote), '-DefaultSubagentReasoningEffort', 'max') + $ReviewerFlags)
+        Add-Result -Condition ($result.ExitCode -eq 1 -and (ConvertTo-ComparableOutput $result.Output).Contains('cannot contain a single quote')) -CaseName ("default subagent model with U+{0:X4} is rejected" -f $quoteCodePoint) -FailMessage $result.Output
+        Add-Result -Condition ((Get-InstalledFileCount -Root $smartQuoteRoot) -eq 0) -CaseName ("default subagent model with U+{0:X4} writes nothing" -f $quoteCodePoint) -FailMessage 'files were created'
+    }
+    $typographicQuote = [char]0x2019
+    $smartQuoteOwlRoot = New-TempRoot
+    $result = Invoke-InstallerRun -Arguments @('-Action', 'install', '-Components', 'agents', '-Level', 'user', '-UserRoot', $smartQuoteOwlRoot, '-OwlModel', ('vendor/x' + $typographicQuote), '-OwlReasoningEffort', 'high', '-CatModel', 'c', '-CatReasoningEffort', 'low', '-DefaultSubagentModel', 'd', '-DefaultSubagentReasoningEffort', 'max')
+    Add-Result -Condition ($result.ExitCode -eq 1 -and (ConvertTo-ComparableOutput $result.Output).Contains('cannot contain a single quote')) -CaseName 'reviewer model with a typographic quote is rejected' -FailMessage $result.Output
+    Add-Result -Condition ((Get-InstalledFileCount -Root $smartQuoteOwlRoot) -eq 0) -CaseName 'reviewer model with a typographic quote writes nothing' -FailMessage 'files were created'
+
+    # Case 94: a legitimate value with spaces, a dollar sign, a backtick, a
+    # typographic double quote, and a non-ASCII letter still installs, leaves a
+    # guard script that parses, and reaches the deny reason as the exact text.
+    $legitimateValue = 'vendor/My ' + [char]0x201C + 'Provider' + [char]0x201D + ' $env:tick ` and caf' + [char]0x00E9
+    $legitimateRoot = New-TempRoot
+    $result = Invoke-InstallerRun -Arguments (@('-Action', 'install', '-Components', 'agents', '-Level', 'user', '-UserRoot', $legitimateRoot, '-DefaultSubagentModel', $legitimateValue, '-DefaultSubagentReasoningEffort', 'max') + $ReviewerFlags)
+    $legitimateGuardPath = Join-Path $legitimateRoot 'scripts/guard-subagent-delegation/guard-subagent-delegation.ps1'
+    $legitimateOk = $false
+    if ($result.ExitCode -eq 0 -and (Test-Path -LiteralPath $legitimateGuardPath)) {
+        $guardErrors = $null
+        $null = [System.Management.Automation.Language.Parser]::ParseFile($legitimateGuardPath, [ref]$null, [ref]$guardErrors)
+        $legitimateOk = $null -eq $guardErrors -or $guardErrors.Count -eq 0
+    }
+    Add-Result -Condition ($legitimateOk) -CaseName 'legitimate default subagent value still installs and parses' -FailMessage $result.Output
+    $legitimateProbeInput = (@{
+        hook_event_name = 'PreToolUse'
+        session_id      = 'test-session'
+        timestamp       = '2026-11-04T01:00:00Z'
+        cwd             = 'C:\repo'
+        tool_name       = 'task'
+        tool_input      = @{ agent_type = 'explore'; prompt = 'x' }
+    } | ConvertTo-Json -Depth 8 -Compress)
+    $legitimateProbeOutput = ''
+    $legitimateReason = $null
+    if (Test-Path -LiteralPath $legitimateGuardPath) {
+        $legitimateProbeOutput = (Invoke-ChildPowerShell -ScriptPath $legitimateGuardPath -StdinJson $legitimateProbeInput).Output
+        if (-not [string]::IsNullOrWhiteSpace($legitimateProbeOutput)) {
+            try {
+                $legitimateProbeDocument = [System.Text.Json.JsonDocument]::Parse($legitimateProbeOutput)
+                $legitimateReason = $legitimateProbeDocument.RootElement.GetProperty('permissionDecisionReason').GetString()
+            }
+            catch {
+                $legitimateReason = $null
+            }
+        }
+    }
+    Add-Result -Condition ($null -ne $legitimateReason -and $legitimateReason.Contains($legitimateValue)) -CaseName 'legitimate default subagent value reaches the deny reason unchanged' -FailMessage "reason: '$legitimateReason' output: $legitimateProbeOutput"
+
+    # Case 95: the default subagent model alone, on a run that includes
+    # neither the agents nor the guard, is rejected instead of ignored.
+    $skillsOnlyDefaultRoot = New-TempRoot
+    $result = Invoke-InstallerRun -Arguments @('-Action', 'install', '-Components', 'skills', '-Level', 'user', '-UserRoot', $skillsOnlyDefaultRoot, '-DefaultSubagentModel', 'd', '-DefaultSubagentReasoningEffort', 'max')
+    Add-Result -Condition ($result.ExitCode -eq 1 -and (ConvertTo-ComparableOutput $result.Output).Contains('apply only when installing the agents component or the subagent delegation guard')) -CaseName 'default subagent model alone on a skills-only install fails' -FailMessage $result.Output
+    Add-Result -Condition ((Get-InstalledFileCount -Root $skillsOnlyDefaultRoot) -eq 0) -CaseName 'default subagent model alone on a skills-only install writes nothing' -FailMessage 'files were created'
+    $uninstallDefaultRoot = New-TempRoot
+    $result = Invoke-InstallerRun -Arguments @('-Action', 'uninstall', '-Components', 'agents', '-Level', 'user', '-UserRoot', $uninstallDefaultRoot, '-DefaultSubagentModel', 'd', '-DefaultSubagentReasoningEffort', 'max')
+    Add-Result -Condition ($result.ExitCode -eq 1 -and (ConvertTo-ComparableOutput $result.Output).Contains('apply only when installing the agents component or the subagent delegation guard')) -CaseName 'default subagent model on an uninstall fails' -FailMessage $result.Output
+
+    # Case 96: an installer placeholder inside a longer value is rejected,
+    # because a later replacement in the same template would rewrite it after
+    # the value is written, silently changing the installed default model.
+    $embeddedPlaceholderRoot = New-TempRoot
+    $result = Invoke-InstallerRun -Arguments (@('-Action', 'install', '-Components', 'agents', '-Level', 'user', '-UserRoot', $embeddedPlaceholderRoot, '-DefaultSubagentModel', 'vendor/__CAT_MODEL__', '-DefaultSubagentReasoningEffort', 'max') + $ReviewerFlags)
+    Add-Result -Condition ($result.ExitCode -eq 1 -and (ConvertTo-ComparableOutput $result.Output).Contains('or a placeholder such as')) -CaseName 'default subagent model with an embedded placeholder is rejected' -FailMessage $result.Output
+    Add-Result -Condition ((Get-InstalledFileCount -Root $embeddedPlaceholderRoot) -eq 0) -CaseName 'default subagent model with an embedded placeholder writes nothing' -FailMessage 'files were created'
+
+    # Case 97: a whole value shaped like a placeholder in any letter case is
+    # rejected, because it would read as an unfilled installer value.
+    $lowercasePlaceholderRoot = New-TempRoot
+    $result = Invoke-InstallerRun -Arguments @('-Action', 'install', '-Components', 'agents', '-Level', 'user', '-UserRoot', $lowercasePlaceholderRoot, '-OwlModel', 'm', '-OwlReasoningEffort', 'high', '-CatModel', '__cat_model__', '-CatReasoningEffort', 'low', '-DefaultSubagentModel', 'd', '-DefaultSubagentReasoningEffort', 'max')
+    Add-Result -Condition ($result.ExitCode -eq 1 -and (ConvertTo-ComparableOutput $result.Output).Contains('or a placeholder such as')) -CaseName 'lowercase placeholder-shaped Cat model is rejected' -FailMessage $result.Output
+    Add-Result -Condition ((Get-InstalledFileCount -Root $lowercasePlaceholderRoot) -eq 0) -CaseName 'lowercase placeholder-shaped Cat model writes nothing' -FailMessage 'files were created'
+
+    # Case 98: only the installer's own placeholders are rejected, so an id
+    # that merely contains double underscores still installs unchanged.
+    $underscoreIdRoot = New-TempRoot
+    $result = Invoke-InstallerRun -Arguments (@('-Action', 'install', '-Components', 'agents', '-Level', 'user', '-UserRoot', $underscoreIdRoot, '-DefaultSubagentModel', 'vendor/X__INT__Y', '-DefaultSubagentReasoningEffort', 'max') + $ReviewerFlags)
+    $underscoreGuardPath = Join-Path $underscoreIdRoot 'scripts/guard-subagent-delegation/guard-subagent-delegation.ps1'
+    $underscoreIdOk = $result.ExitCode -eq 0 -and (Test-Path -LiteralPath $underscoreGuardPath) -and
+        (Get-Content -LiteralPath $underscoreGuardPath -Raw).Contains("`$DefaultSubagentModel = 'vendor/X__INT__Y'")
+    Add-Result -Condition ($underscoreIdOk) -CaseName 'id with double underscores installs unchanged' -FailMessage $result.Output
 }
 finally {
     foreach ($tempRoot in $script:tempRoots) {
