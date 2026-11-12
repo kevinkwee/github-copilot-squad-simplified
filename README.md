@@ -2,7 +2,7 @@
 
 A simplified orchestration setup for the **VS Code Agents window** (built on the Copilot SDK harness), and a leaner variant of [github-copilot-squad](https://github.com/kevinkwee/github-copilot-squad). It ships in two modes:
 
-- **Trio (default)**: `Capybara` (entry point + implementer) + `Owl` (code reviewer) + `Cat` (comment/docstring reviewer).
+- **Trio (default)**: `Capybara` (entry point + implementer) + `Owl` (code reviewer) + `Cat` (comment, docstring, and docs prose reviewer).
 - **Duo**: `Capybara` + `Owl` only, with no dedicated comment/docstring pass. The Duo behavior lives in `CapybaraDuo.agent.md`.
 
 In both modes the goal is the same: keep implementation and review as **separate perspectives**, so technical work goes through a build → review loop before final output. What's removed (vs the original 4-agent squad) is the overhead of a separate execution agent and a separate lightweight helper.
@@ -28,24 +28,26 @@ The original concern with merging was that **the context window would fill up qu
 
 > **When to use the original squad instead:** if you start wiring in **specialized** implementers (e.g. a frontend-focused agent that knows a specific UI framework, or a backend agent tuned to a particular stack), the separate-agent model becomes worth it again. This simplified repo assumes a single generalist does the building.
 
-## Why a dedicated comment/docstring reviewer (Trio)
+## Why a dedicated comment, docstring, and docs prose reviewer (Trio)
 
 Agents sometimes write unnecessary, redundant, or inappropriate comments and docstrings, even when the rules are already stated in `AGENTS.md`. Owl's review covers this, but Owl also reviews the code implementation, so these prose issues sometimes get skipped in practice.
 
-The Trio mode adds **Cat**, a reviewer that focuses **only** on comments and docstrings. It runs after Owl approves the implementation (or directly for comment/docstring-only requests), so the code is already correct; Cat's whole job is to groom the prose. The expected comment/docstring rules live in `AGENTS.md`, so they stay easy to update and maintain.
+The Trio mode adds **Cat**, a reviewer that focuses **only** on comments and docstrings, plus docs prose when the project declares a Docs Setup. It runs after Owl approves the implementation (or directly for comment/docstring-only requests), so the code is already correct; Cat's whole job is to groom the prose. The expected comment/docstring rules live in `AGENTS.md`, so they stay easy to update and maintain.
 
 Because Cat owns the prose review, Trio also lets Capybara skip Owl and call Cat directly for **comment/docstring-only requests** (changes that touch only comments and/or docstrings), avoiding a redundant code-logic review pass when there is no logic change to review.
 
+The docs pages Cat reviews are the ones a change touches under the project's declared docs root (see the [Project docs skill](#project-docs-skill)).
+
 ## The team (two modes)
 
-**Trio (default)** adds a focused comment/docstring pass after Owl approves:
+**Trio (default)** adds a focused comment, docstring, and docs prose pass after Owl approves:
 
 ```mermaid
 flowchart LR
   U[User] --> C[Capybara 🦫<br/>Entry point + Implementer]
   C -->|code review| O[Owl 🦉<br/>Reviewer]
   O -->|APPROVED / CHANGES REQUIRED| C
-  C -->|comment & docstring review| A[Cat 🐱<br/>Comment/docstring reviewer]
+  C -->|comment, docstring & docs prose review| A[Cat 🐱<br/>Comment, docstring & docs prose reviewer]
   A -->|APPROVED / CHANGES REQUIRED| C
   C --> U
 ```
@@ -54,7 +56,7 @@ flowchart LR
 
 - **Capybara** is the only user-invocable agent. It receives the request, investigates, plans, implements, runs tests, and writes an implementation summary, then runs the review loop(s).
 - **Owl** is not user-invocable. It reviews Capybara's implementation independently (correctness, completeness, quality, tests), classifies findings as Critical or Minor, and returns `APPROVED` or `CHANGES REQUIRED`.
-- **Cat** (Trio only) is not user-invocable. After Owl approves, it reviews **only** the comments and docstrings, classifies findings as Critical or Minor, and returns `APPROVED` or `CHANGES REQUIRED`.
+- **Cat** (Trio only) is not user-invocable. After Owl approves, it reviews **only** the comments and docstrings, plus docs prose when the project declares a Docs Setup, classifies findings as Critical or Minor, and returns `APPROVED` or `CHANGES REQUIRED`.
 - Capybara applies all **Critical** findings from Owl (and Cat, in Trio), re-reviews if needed, and returns the final result to the user.
 
 **Agent files in this repo:** in [`agents/`](agents/): `Capybara.agent.md` (Trio, default), `CapybaraDuo.agent.md` (Duo variant), `Owl.agent.md`, `Cat.agent.md`.
@@ -114,7 +116,7 @@ Copy the agent profiles into:
 
 - `.github/agents/*.agent.md`
 
-This makes them available for that repository/workspace. In this repo the profiles live in [`agents/`](agents/), so copying (or linking) that folder's files into your project's `.github/agents/` is enough once you replace the Owl and Cat placeholders in the two Capybara files (see the Subagent model note); the `skills/` folder ships `agents-md`, `commit-message`, `gh-multi-account`, `merge-strategy`, and `pr-description` the same way; and the `hooks/` and `scripts/` folders ship the two squad hooks (`guard-pwsh-continuation` and `guard-subagent-delegation`), whose install steps (including the required script-path edits in the JSONs and the reviewer values and default pair in the delegation guard script) are in the Hooks section.
+This makes them available for that repository/workspace. In this repo the profiles live in [`agents/`](agents/), so copying (or linking) that folder's files into your project's `.github/agents/` is enough once you replace the Owl and Cat placeholders in the two Capybara files (see the Subagent model note); the `skills/` folder ships `agents-md`, `commit-message`, `gh-multi-account`, `merge-strategy`, `pr-description`, and `project-docs` the same way; and the `hooks/` and `scripts/` folders ship the two squad hooks (`guard-pwsh-continuation` and `guard-subagent-delegation`), whose install steps (including the required script-path edits in the JSONs and the reviewer values and default pair in the delegation guard script) are in the Hooks section.
 
 The scripted install performs the same copies and fills the placeholders by itself: run it with `-Level repo -ProjectRoot <the project>` (see the Scripted install section).
 
@@ -145,7 +147,7 @@ Enforcement of the note is also installable. With the default `-SubagentGuard Au
 1. Open the Agents window (or the Chat view) in VS Code.
 2. Select `Capybara` (Trio, default) or `Capybara Duo` from the agent picker.
 3. Ask your request naturally.
-4. For technical requests, `Capybara` implements, then runs the Owl review loop (and, in Trio, the Cat comment/docstring loop).
+4. For technical requests, `Capybara` implements, then runs the Owl review loop (and, in Trio, the Cat comment, docstring, and docs prose loop).
 
 ## How the flow works
 
@@ -153,7 +155,7 @@ Enforcement of the note is also installable. With the default `-SubagentGuard Au
 
 `Capybara` receives every request directly. There is no router and no lightweight helper; it handles both technical and simple/non-technical requests itself:
 
-- **Regular technical request** → investigate, plan, implement, verify, then enter the code review loop with Owl (and, in Trio, the Cat loop after).
+- **Regular technical request** → investigate, plan, implement, verify, then enter the code review loop with Owl (and, in Trio, the Cat loop after). A request that changes only docs pages counts as one, because Owl checks every docs statement against the code.
 - **Comment/docstring-only request** (Trio) → investigate, plan, implement, verify, then skip Owl and go straight to the Cat loop, since Owl reviews code logic and there is no logic change to review.
 - **Simple / non-technical request** → answer directly (no review needed).
 - **Ambiguous request** → asks a clarification question first.
@@ -166,18 +168,18 @@ For technical requests, `Capybara` runs this loop. **In Trio, this loop is skipp
 2. Implement the task and write `implementation_1.md` into that folder.
 3. Hand off to `Owl` (focused handoff: the implementation report path, not the whole conversation).
 4. If `Owl` returns **APPROVED** → in Trio, proceed to section 3 (the Cat loop); in Duo, return the final result.
-5. If `Owl` returns **CHANGES REQUIRED** → apply every Critical fix, re-run tests, write a fresh `implementation_{iteration}.md` (next number), and call `Owl` again (Owl writes `review_{iteration}.md` with that same number).
+5. If `Owl` returns **CHANGES REQUIRED** → apply every Critical fix, re-run tests (plus the docs build when docs pages changed), write a fresh `implementation_{iteration}.md` (next number), and call `Owl` again (Owl writes `review_{iteration}.md` with that same number).
 6. Repeat until approved. The loop has no iteration cap.
 
 The loop also ends when `Capybara` hits an error it cannot resolve, which it reports instead of looping, or when it believes a Critical finding is wrong and asks the user to decide.
 
-### 3) Comment & docstring review loop (Capybara ↔ Cat, Trio only)
+### 3) Comment, docstring & docs prose review loop (Capybara ↔ Cat, Trio only)
 
 Trio mode runs a second, focused loop with `Cat`. For regular technical requests it runs after Owl approves. For comment/docstring-only requests it runs right after implementation (Owl was skipped). Cat's review number always equals the `implementation_*.md` number it reviews, so when Owl approves `implementation_N.md`, Cat writes `docstring_review_N.md` (no increment between Owl and Cat):
 
 1. Hand off to `Cat` (focused handoff: the report subfolder, the number N of the latest `implementation_*.md`, and every `implementation_*.md` Cat has not reviewed yet). At the Owl-to-Cat transition Cat is handed `implementation_1.md`..`implementation_N.md` (all of them, since this is its first review) but writes a single `docstring_review_{N}.md`. "Handed" scopes the handoff, not Cat's tool access. Cat can read more from disk if it needs extra context.
 2. If `Cat` returns **APPROVED** → return the final result.
-3. If `Cat` returns **CHANGES REQUIRED** → apply every Critical fix (and any cheap minor suggestions), re-run tests/lint if code is touched, write a fresh `implementation_{iteration}.md` (next number), and call `Cat` again (Cat writes `docstring_review_{iteration}.md` with that same number).
+3. If `Cat` returns **CHANGES REQUIRED** → apply every Critical fix (and any cheap minor suggestions), re-run tests/lint if code is touched and the docs build if docs pages are touched, write a fresh `implementation_{iteration}.md` (next number), and call `Cat` again (Cat writes `docstring_review_{iteration}.md` with that same number).
 4. Repeat until approved. The loop has no iteration cap.
 
 The loop also ends when `Capybara` hits an error it cannot resolve, which it reports instead of looping, or when it believes a Critical finding is wrong and asks the user to decide.
@@ -225,7 +227,8 @@ sequenceDiagram
 
 - Single entry point: receives requests and acts on them directly.
 - Does the technical work: investigate, plan, implement, run tests, lint/format.
-- Manages the Capybara ↔ Owl code review loop, then the Capybara ↔ Cat comment/docstring loop (each repeats until approved, with no iteration cap).
+- When the project's `AGENTS.md` declares a Docs Setup, updates the docs in the same change through the `project-docs` skill and runs the docs build (see the [Project docs skill](#project-docs-skill)).
+- Manages the Capybara ↔ Owl code review loop, then the Capybara ↔ Cat comment, docstring, and docs prose loop (each repeats until approved, with no iteration cap).
 - For comment/docstring-only requests (Trio), skips the Owl loop and goes straight to the Cat loop.
 - Applies **all** Critical findings from Owl and Cat; never skips them by reasoning them away.
 - Asks clarifying questions (with freeform input) when the request is ambiguous.
@@ -242,6 +245,7 @@ sequenceDiagram
 - Reads every applicable `AGENTS.md` in full before reviewing, unless it is already in context (see [Reviewers read `AGENTS.md` themselves](#reviewers-read-agentsmd-themselves)).
 - Reads the `implementation_{iteration}.md` summary **and** the actual changed files from disk.
 - Runs available tests for touched modules to detect regressions.
+- When the project declares a Docs Setup, checks the docs against the change, runs the docs build, and reviews the docs prose. Missing or contradicting docs are Critical.
 - Classifies findings:
   - **Critical** → blocks approval (`CHANGES REQUIRED`)
   - **Minor** → suggestions only
@@ -250,8 +254,8 @@ sequenceDiagram
 
 ### Cat (`Cat.agent.md`, Trio only)
 
-- Reviews **only** the comments and docstrings in the changed files (after Owl approves the implementation).
-- Does NOT review code logic, correctness, architecture, or tests; Owl owns that.
+- Reviews **only** the comments and docstrings in the changed files (after Owl approves the implementation), plus the prose of the changed docs pages when the project declares a Docs Setup.
+- Does NOT review code logic, correctness, architecture, tests, or whether docs statements match the code. Owl owns that.
 - Applies its own general principles (cold-reader oriented; comments explain WHY, never WHAT) and follows the detailed comment/docstring rules in `AGENTS.md`.
 - Reads every applicable `AGENTS.md` in full before reviewing, unless it is already in context (see [Reviewers read `AGENTS.md` themselves](#reviewers-read-agentsmd-themselves)).
 - Reads all `implementation_*.md` reports Capybara hands it (at the Owl-to-Cat transition, all of `implementation_1.md`..`implementation_N.md`; on later re-reviews, only the new `implementation_*.md` since its last `docstring_review_*.md`) and writes a single `docstring_review_{iteration}.md` per call. The handed reports scope the review, not what Cat may read. Cat can read more from disk if it needs extra context.
@@ -361,6 +365,23 @@ skills/
 - **Conflicts route through the workflow**: when a merge hits conflicts, the direct merge path stops and the conflict resolution runs the squad workflow (implement, then the review loop) before the merge completes with the chosen strategy.
 - **Sync exclusion**: branch sync flows that only bring a branch up to date with its upstream (for example the session's sync-upstream skill or `git pull --rebase`) are updates, not merge decisions, so the skill does not apply to them.
 - **Deployment**: same model as the other skills; discovered at `.github/skills/merge-strategy/`.
+
+## Project docs skill
+
+A sixth shipped skill keeps a project's docs in step with its code, so people can understand and use the project without reading the code:
+
+```text
+skills/
+└── project-docs/
+    └── SKILL.md              # Docs Setup format, bootstrap and update procedures
+```
+
+- **Docs Setup**: a project opts in with a `### Docs Setup` subsection in the `## Documentation` section of its root `AGENTS.md`. It names the audiences, the page model, the docs root, the framework, the build command, and the generated reference pages. The `agents-md` template carries the subsection as a skeleton to fill or delete. Without it, the squad leaves docs alone.
+- **Page models**: `shared` puts user content and a `How it works` section for engineers on one page per feature, which suits technical audiences. `split` keeps a user guide and an internals section in one site, which suits products whose end users are not technical.
+- **`/project-docs bootstrap`**: documents an existing project, or records the setup of the docs it already has. It runs only on request. It always asks which framework to use, with a comparison and a recommendation for the project. For a project without docs, it follows the recommendation by stack. For docs on a framework that is in maintenance mode or unmaintained, or has announced or reached its end of life, it recommends the successor, and falls back to the recommendation by stack when there is no successor. For docs on any other framework, it recommends keeping that framework. For example, docs on Material for MkDocs move to Zensical. It then presents a plan and writes nothing until the plan is approved. When a change alters something users see in a project without a Docs Setup, Capybara's final report mentions once that the skill can bootstrap one.
+- **Update mode**: Capybara runs it inside every change in a project with a Docs Setup. Docs change when behavior, a flag, a contract, or anything users see changes, while refactors and internal renames leave them alone. Lookup material comes from reference pages generated from a source such as an OpenAPI spec, a schema, or `--help` output, never from restated code.
+- **Review**: Owl checks every changed docs statement against the code, runs the docs build, reviews the docs prose, and treats missing or contradicting docs as Critical. In Trio, Cat reviews the docs prose as well. A request that changes only docs pages runs the Owl loop, then, in Trio, the Cat loop, because docs accuracy is a correctness question.
+- **Deployment**: same model as the other skills, discovered at `.github/skills/project-docs/`.
 
 ## Hooks
 
@@ -511,7 +532,7 @@ Skill discovery is best effort. VS Code does not guarantee a skill invocation fo
 | --- | --- | --- |
 | Entry point + Implementer | Capybara 🦫 | Calm, friendly, and sociable. Comfortable doing the work itself and coordinating the review without the drama. |
 | Code reviewer | Owl 🦉 | Classic symbol of wisdom and sharp observation. Spots sneaky issues and keeps everything in check. |
-| Comment/docstring reviewer | Cat 🐱 | Fastidious groomer. Spends much of its day grooming its coat until every hair lies just right; grooms comments and docstrings until every word earns its place. (Trio only) |
+| Comment, docstring, and docs prose reviewer | Cat 🐱 | Fastidious groomer. Spends much of its day grooming its coat until every hair lies just right; grooms comments, docstrings, and docs until every word earns its place. (Trio only) |
 
 > The original squad also had **Otter** 🦦 (the playful, tool-skilled builder) and **Squirrel** 🐿️ (the quick, nimble helper). Both were folded into Capybara here; one generalist builder is enough until you need specialists. **Cat** 🐱 is new to this simplified repo, added for the Trio mode's dedicated comment/docstring pass.
 

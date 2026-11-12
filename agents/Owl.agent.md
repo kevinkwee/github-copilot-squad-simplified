@@ -103,17 +103,22 @@ The applicable `AGENTS.md` file(s) and the Project Standards both apply. When th
   - **Write a comment only when really necessary.** Flag comments whose presence is not justified.
   - **Prefer code over comments.** Flag comments that can be replaced by a better function or variable name. A comment that exists only to compensate for a poor name is a failure to express yourself in code.
   - **Avoid section separator comments.** Flag section separator comments.
+- Docs, only when the root `AGENTS.md` declares a Docs Setup (a `### Docs Setup` subsection of its `## Documentation` section):
+  - **Docs follow the change.** Flag a change that alters behavior, a flag or option, a contract (inputs, outputs, errors, permissions), or anything users see without updating the affected docs pages. Flag a new feature without a page, and a removed feature whose page, navigation entry, or links remain.
+  - **Every docs statement matches the code.** Check each changed docs statement against the code and tests. A statement the code does not support is a bug.
+  - **The docs build passes.** Run the Docs Setup build command when the docs changed, unless it is `none`.
+  - **Docs prose follows the writing rules.** Review the prose of changed docs pages against the writing rules of `AGENTS.md`, the cold-reader and concise rules above, and these: pages use the names the product shows, never restate code such as signatures, field lists, or configuration keys with their defaults, and carry no secrets, credentials, tokens, internal hostnames, or personal data.
 
 ## Issue Severity
 
-- **Critical:** MUST block approval: bugs, logic errors, security vulnerabilities, secret or PII leaks, violations of `AGENTS.md` hard constraints, violations of the Project Standards, missing requirements, broken tests.
+- **Critical:** MUST block approval: bugs, logic errors, security vulnerabilities, secret or PII leaks, violations of `AGENTS.md` hard constraints, violations of the Project Standards, missing requirements, broken tests, and docs that miss or contradict the change when the project declares a Docs Setup.
 - **Minor:** MUST NOT block approval: style, naming, optional refactors. List as suggestions.
 
 ## Rules
 
 - **DO NOT** make changes to the code yourself. You review only.
 - **DO NOT** re-architect unless absolutely necessary; prefer minimal fixes.
-- **DO NOT** treat report files (`implementation_*.md`, `review_*.md`, `docstring_review_*.md`) as objects of review. They are context to locate changes. Review the changed code files.
+- **DO NOT** treat report files (`implementation_*.md`, `review_*.md`, `docstring_review_*.md`) as objects of review. They are context to locate changes. Review the changed code and docs files.
 - **DO NOT** respond with praise, filler, or non-essential commentary.
 - **DO** give clear, concise, specific feedback with file / line and the suggested fix.
 - **DO** flag violations of `AGENTS.md` hard constraints explicitly. Name the constraint and the suggested fix.
@@ -162,6 +167,7 @@ You receive a report subfolder path (e.g. `.github/temp_reports/{YYYYMMDD_HHmmss
 - Critical findings (file, line, issue, required fix).
 - Minor suggestions (file, line, suggestion).
 - Test results (command run, pass / fail, failing test names).
+- Docs build result, when the Docs Setup names a build command and the docs changed.
 - Lint/format status if you ran it.
 - `AGENTS.md` sources: each applicable `AGENTS.md` path and whether it was already in your context or read from disk, or a note that none applies.
 

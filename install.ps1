@@ -219,7 +219,7 @@ $ErrorActionPreference = 'Stop'
 
 $RepoRoot = [System.IO.Path]::GetFullPath($PSScriptRoot)
 $AgentFiles = 'Capybara.agent.md', 'CapybaraDuo.agent.md', 'Cat.agent.md', 'Owl.agent.md'
-$SkillFolders = 'agents-md', 'commit-message', 'gh-multi-account', 'merge-strategy', 'pr-description'
+$SkillFolders = 'agents-md', 'commit-message', 'gh-multi-account', 'merge-strategy', 'pr-description', 'project-docs'
 $HookShellGuardName = 'guard-pwsh-continuation'
 $HookSubagentGuardName = 'guard-subagent-delegation'
 $HookNames = $HookShellGuardName, $HookSubagentGuardName
@@ -243,7 +243,8 @@ $DefaultSubagentReasoningEffortChoice = 'max'
 $TempReportsExcludePattern = '**/.github/temp_reports/'
 $TempReportsExcludeMarker = '# Copilot Squad agent reports (managed by the squad install.ps1)'
 $TempReportsEquivalentPatternRegex = '^\*\*/\.github/temp_reports/?$'
-$LeftoverPattern = '^(CapybaraDuo|Capybara|Cat|Owl|guard-pwsh-continuation|guard-subagent-delegation|agents-md|commit-message|gh-multi-account|merge-strategy|pr-description)([._\- ]|$)'
+$SquadNames = @($AgentFiles | ForEach-Object { $_ -replace '\.agent\.md$', '' }) + $HookNames + $SkillFolders
+$LeftoverPattern = '^(' + (($SquadNames | ForEach-Object { [regex]::Escape($_) }) -join '|') + ')([._\- ]|$)'
 
 function Read-MenuChoiceIndex {
     param(
@@ -369,9 +370,9 @@ function Read-TempReportsExcludeChoice {
 function Read-ComponentMenu {
     $optionLabels = @(
         'all (agents, skills, and hooks)',
-        'agents (4 custom agent profiles)',
-        'skills (5 squad skills)',
-        'hooks (2 guard hook configs and their companion scripts)')
+        ('agents ({0} custom agent profiles)' -f $AgentFiles.Count),
+        ('skills ({0} squad skills)' -f $SkillFolders.Count),
+        ('hooks ({0} guard hook configs and their companion scripts)' -f $HookNames.Count))
     $optionValues = 'all', 'agents', 'skills', 'hooks'
     Write-Host ''
     Write-Host 'Which components? Enter one number, several numbers separated by commas (for example 2,3), or press Enter for [1].'

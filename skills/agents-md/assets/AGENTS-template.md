@@ -599,7 +599,18 @@ npx vitest run tests/your_tests.test.ts --coverage
 
 ## Documentation
 
-Update `README.md` when you add new features, endpoints, or significant changes. Update this file (`AGENTS.md`) when you add new modules, classes, or change architecture. Both `README.md` and `AGENTS.md` must be kept in sync with the codebase.
+Update `README.md` when you add new features, endpoints, or significant changes. Update this file (`AGENTS.md`) when you add new modules, classes, or change architecture. Both `README.md` and `AGENTS.md` must be kept in sync with the codebase. When the project declares a Docs Setup below, feature and behavior changes go to the docs pages instead, and `README.md` stays a short landing page that links to them.
+
+### Docs Setup
+
+<!-- Delete this subsection unless the project has a docs site or docs folder that agents keep in step with the code. The project-docs skill fills these fields when it bootstraps the docs. -->
+
+- Audiences: <!-- who reads the docs, for example developers who call the library, or end users plus the engineers who maintain the product -->
+- Page model: <!-- shared (one page per feature, with a How it works section for engineers) or split (a user guide and an internals section) -->
+- Docs root: <!-- the folder that holds the docs source, for example docs/ -->
+- Framework: <!-- the docs framework and its config file, or markdown for plain Markdown with no site -->
+- Build command: <!-- the command that builds the docs and fails on broken links, or none -->
+- Generated reference: <!-- each generated page with its source and the command that regenerates it, or none -->
 
 ## Key Concepts
 

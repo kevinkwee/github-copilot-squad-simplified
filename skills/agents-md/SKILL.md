@@ -22,7 +22,7 @@ The template is bundled in this skill: [assets/AGENTS-template.md](./assets/AGEN
 - The project's deliberate decisions are authoritative. Never silently delete or weaken project-specific content.
 - A difference between an existing file and the template falls into exactly one of three buckets, each with its own handling:
   1. **Outdated pattern** (the template deliberately retired it): converge to the template wording.
-  2. **Missing template section**: add it, with real project content where the repo supplies it and a fill-in placeholder otherwise.
+  2. **Missing template section**: add it, with real project content where the repo supplies it and a fill-in placeholder otherwise. Add a section the template marks delete-if-unused only when it applies to the project.
   3. **Deliberate project-specific choice**: keep it as is, and report it as an intentional difference. Never "fix" one.
 - Ask only for facts the repo cannot answer. Never request secrets.
 
@@ -38,7 +38,7 @@ The template is bundled in this skill: [assets/AGENTS-template.md](./assets/AGEN
 2. **Ask** only for what the code cannot answer: the project purpose one-liner, deliberate conventions not yet written down, the coverage minimum the team actually enforces, and any template sections known to be unnecessary for this project.
 3. **Draft from the template.**
    - Fill every `<!-- -->` placeholder with project content.
-   - Delete the sections marked delete-if-unused that do not apply (Project Map, Language and Runtime Constraints, and Migrations are the usual candidates).
+   - Delete the sections marked delete-if-unused that do not apply (Project Map, Language and Runtime Constraints, Migrations, and the Docs Setup subsection are the usual candidates).
    - Rewrite language-specific examples to the project's stack while keeping the principle (for example, Ruff commands become the project's linter commands, pytest becomes its test runner).
    - Resolve the tunable numbers where the template comments ask for a choice (currently the coverage minimum).
    - Keep every other rule intact. Do not invent new rules. Do not ship the template untouched; every kept section must carry project-specific content.
