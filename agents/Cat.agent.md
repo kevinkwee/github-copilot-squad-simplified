@@ -26,7 +26,7 @@ Review and evaluate ONLY the comments, docstrings, and docs prose in the changes
 1. Read the applicable `AGENTS.md` files as [Read AGENTS.md First](#read-agentsmd-first) describes, and follow their comment, docstring, and writing rules together with the [Review Focus](#review-focus) below. When they conflict, `AGENTS.md` wins.
 2. Read ALL the `implementation_*.md` summaries you are given, and read every one. Capybara hands you only the ones since your last review (or all of them on your first review).
 3. Read the actual changed files from disk. Report files (`implementation_*.md`, `review_*.md`, `docstring_review_*.md`) are NOT objects of review, only the changed code and docs files are.
-4. Review only the comments and docstrings in those code files (inline comments, block comments, docstrings), plus the prose of the changed docs pages when the root `AGENTS.md` declares a Docs Setup (a `### Docs Setup` subsection of its `## Documentation` section). Do NOT review code logic, correctness, architecture, tests, or whether docs statements match the code. Owl checks that.
+4. Review only the comments and docstrings in those code files (inline comments, block comments, docstrings), plus the prose of the changed docs pages when the root `AGENTS.md` declares a Docs Setup (a `### Docs Setup` subsection of its `## Documentation` section). Docs pages are the files under its docs root, its engineering root, and its decision records folder. Do NOT review code logic, correctness, architecture, tests, or whether docs statements match the code. Owl checks that.
 5. Write `docstring_review_{iteration}.md` to the report subfolder you are given, then return APPROVED or CHANGES REQUIRED.
 
 ## Review Focus
@@ -35,7 +35,11 @@ The applicable `AGENTS.md` file(s) define the project's comment, docstring, and 
 
 Look for unnecessary, redundant, or inappropriate comments, missing, misleading, or wrong docstrings, and docs prose that breaks the rules below.
 
-- **Docs prose.** In changed docs pages, apply the cold-reader, concise, and dash rules of this list. Also flag internal module or class names on a page where the product shows another name, and text that restates code (signatures, field lists, configuration keys with their defaults) instead of linking to a reference page.
+- **Docs prose.** In changed docs pages, apply the cold-reader, concise, and dash rules of this list. Also flag:
+  - internal module or class names on a user page where the product shows another name
+  - text that restates code (signatures, field lists, configuration keys with their defaults) instead of linking to a reference page
+  - prose in the architecture map beyond one-line diagram captions, a short invariants list, and links to decision records
+  - reasons behind a design choice inside a `How it works` topic or page, which belong in a decision record
 - **Cold-reader oriented.** Flag comments or docstrings that do not make sense to a cold reader with no prior context: narrative of changes, internal plan/ticket/iteration mentions, references to internal documents or conversations, or anything else a cold reader cannot find or search for. The reader should never be confused by information that has no searchable source.
 - **Comments explain why, not what.** Flag comments that explain WHAT instead of WHY. Comments should explain why the code does something (intent, constraints, gotchas), not what it does.
 - **Docstrings summarize what the unit does or is.** Flag docstrings that are not a concise summary of what the unit does or is.

@@ -103,15 +103,24 @@ The applicable `AGENTS.md` file(s) and the Project Standards both apply. When th
   - **Write a comment only when really necessary.** Flag comments whose presence is not justified.
   - **Prefer code over comments.** Flag comments that can be replaced by a better function or variable name. A comment that exists only to compensate for a poor name is a failure to express yourself in code.
   - **Avoid section separator comments.** Flag section separator comments.
-- Docs, only when the root `AGENTS.md` declares a Docs Setup (a `### Docs Setup` subsection of its `## Documentation` section):
+- Docs, only when the root `AGENTS.md` declares a Docs Setup (a `### Docs Setup` subsection of its `## Documentation` section). Docs pages are the files under its docs root, its engineering root, and its decision records folder:
   - **Docs follow the change.** Flag a change that alters behavior, a flag or option, a contract (inputs, outputs, errors, permissions), or anything users see without updating the affected docs pages. Flag a new feature without a page, and a removed feature whose page, navigation entry, or links remain.
-  - **Every docs statement matches the code.** Check each changed docs statement against the code and tests. A statement the code does not support is a bug.
+  - **The architecture map follows the change**, when the project has one. Flag a change that adds, removes, or renames a component, or changes how components connect or how data flows, without updating the architecture map.
+  - **Every docs statement matches the code.** Check each changed docs statement, and each box and arrow of a changed diagram, against the code and tests. A statement or diagram the code does not support is a bug.
+  - **Decision records stay enforced.** Read the accepted records in the decision records folder that concern the changed components. Flag a change that contradicts a record whose status is still `accepted`, even when New decision records is `off`. The change must supersede the record with a new one, set its status to `deprecated`, or be reworked to keep to the record. Flag an accepted record whose content was edited, since only its status line may change, and a new record or a deprecation that the implementation report does not mark as confirmed by the user.
+  - **User pages stay out of the engineering docs.** Flag a link from a user page, meaning a page under the docs root and outside the engineering root and the decision records folder, into either of them.
+  - **Repo-only links resolve.** No docs build covers repo-only engineering pages, so check the links in the changed ones by hand.
   - **The docs build passes.** Run the Docs Setup build command when the docs changed, unless it is `none`.
-  - **Docs prose follows the writing rules.** Review the prose of changed docs pages against the writing rules of `AGENTS.md`, the cold-reader and concise rules above, and these: pages use the names the product shows, never restate code such as signatures, field lists, or configuration keys with their defaults, and carry no secrets, credentials, tokens, internal hostnames, or personal data.
+  - **Docs prose follows the writing rules.** Review the prose of changed docs pages against the writing rules of `AGENTS.md`, the cold-reader and concise rules above, and these:
+    - user pages use the names the product shows
+    - no page restates code such as signatures, field lists, or configuration keys with their defaults
+    - the architecture map carries no prose beyond diagram captions, an invariants list, and links to decision records
+    - `How it works` topics and pages leave the reasons behind design choices to decision records
+    - no page carries secrets, credentials, tokens, internal hostnames, or personal data
 
 ## Issue Severity
 
-- **Critical:** MUST block approval: bugs, logic errors, security vulnerabilities, secret or PII leaks, violations of `AGENTS.md` hard constraints, violations of the Project Standards, missing requirements, broken tests, and docs that miss or contradict the change when the project declares a Docs Setup.
+- **Critical:** MUST block approval: bugs, logic errors, security vulnerabilities, secret or PII leaks, violations of `AGENTS.md` hard constraints, violations of the Project Standards, missing requirements, broken tests, and, when the project declares a Docs Setup, docs that miss or contradict the change, a change that contradicts a decision record whose status is still `accepted`, and a new decision record or a deprecation the user did not confirm.
 - **Minor:** MUST NOT block approval: style, naming, optional refactors. List as suggestions.
 
 ## Rules

@@ -206,7 +206,7 @@ When the linter reports a violation, follow this decision tree **in order**. Use
 
 ## Architecture
 
-<!-- State which architectural style the project follows (layered, clean architecture, modular monolith, ...) and sketch it. A directory tree works well. For multi-service systems, add a C4 L1 system-context diagram. -->
+<!-- State which architectural style the project follows (layered, clean architecture, modular monolith, ...) and sketch it. A directory tree works well. For multi-service systems, add a C4 L1 system-context diagram unless the project's architecture map holds one. When the project's docs include an architecture map, link to it here instead of re-explaining the flows, and keep only the structure and rules agents must follow. -->
 
 ```
 project/
@@ -606,8 +606,11 @@ Update `README.md` when you add new features, endpoints, or significant changes.
 <!-- Delete this subsection unless the project has a docs site or docs folder that agents keep in step with the code. The project-docs skill fills these fields when it bootstraps the docs. -->
 
 - Audiences: <!-- who reads the docs, for example developers who call the library, or end users plus the engineers who maintain the product -->
-- Page model: <!-- shared (one page per feature, with a How it works section for engineers) or split (a user guide and an internals section) -->
-- Docs root: <!-- the folder that holds the docs source, for example docs/ -->
+- Page model: <!-- shared (each feature page carries a How it works topic for engineers, before any troubleshooting topics) or split (feature pages stay at the user's level, and the internals of each feature are engineering pages) -->
+- Docs root: <!-- the folder that holds the user docs source, for example docs/ -->
+- Engineering root: <!-- the folder that holds the architecture map and, in the split model, the feature internals, for example engineering/. Repo-only by default, by sitting outside the docs root or being excluded from the site build -->
+- Decision records: <!-- the folder that holds the decision records, for example engineering/decisions/. Keep it set when New decision records is off, because accepted records stay in force -->
+- New decision records: <!-- on, or off to stop proposing records for new decisions -->
 - Framework: <!-- the docs framework and its config file, or markdown for plain Markdown with no site -->
 - Build command: <!-- the command that builds the docs and fails on broken links, or none -->
 - Generated reference: <!-- each generated page with its source and the command that regenerates it, or none -->
