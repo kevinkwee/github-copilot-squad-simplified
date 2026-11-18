@@ -58,7 +58,7 @@ The template is bundled in this skill: [assets/AGENTS-template.md](./assets/AGEN
    - Keep the rest of the template exactly as copied, and do not reword, condense, or merge its general rules beyond the edits above.
 5. **Validate** each file written, and fix what fails. The commands below check the root `AGENTS.md`. Point them at any other file written, or use the session's search tool when `rg` is unavailable.
    - no template placeholders left (`rg -n '<!--|\(Template\)|<layer_or_package>|path/to/module-a|replace with the project|Example \(a Python' AGENTS.md` finds none, apart from comments the project keeps on purpose, such as a linter directive)
-   - no non-ASCII dashes and no ASCII hyphen clause separators (`rg -n '[\p{Pd}&&[^-]]' AGENTS.md` and `rg -n '\S --? ' AGENTS.md` find no violations, where a `\S --? ` hit inside code, or a lone `-` that marks an empty table cell, does not count as one)
+   - no non-ASCII dashes and no ASCII hyphen clause separators (`rg -n '[\p{Pd}&&[^-]]' AGENTS.md` and `rg -n '[^\s>|] -{1,3}(\s|$)' AGENTS.md` find no violations, except that a hit inside code or a math expression does not count as a violation)
    - every recorded command matches what the project provides (verify against its config, such as package scripts, `pyproject.toml`, a Makefile, CI workflows, or wrapper scripts), or, when the file is built before that config exists, what the task's plan sets up
    - internal anchors (for example the Rule of Thumb link) and mentions of other sections still resolve
 6. **Report**:

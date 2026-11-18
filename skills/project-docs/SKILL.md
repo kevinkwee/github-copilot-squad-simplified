@@ -140,8 +140,8 @@ Run it only when the user asks, for example "document this project" or "set up d
    - the build command passes
    - every statement, box, and arrow was checked against the code
    - no user page links into the engineering docs
-   - no non-ASCII dashes remain unless the project's writing rules allow them (`rg -n '[\x{2010}-\x{2015}]'` across the docs root, the engineering root, and the decision records folder returns nothing), and no ASCII hyphen separates clauses
-6. **Report** the Docs Setup values, the pages created, and anything left undocumented with the reason.
+   - no non-ASCII dashes remain and no ASCII hyphen separates clauses, where the writing rules that apply ban them (`rg -n '[\p{Pd}&&[^-]]'` and `rg -n '[^\s>|] -{1,3}(\s|$)'` across the docs root, the engineering root, and the decision records folder find no violations in the pages and records this run wrote by hand, except that a hit inside code or a math expression does not count as a violation). Report the violations in other files instead of fixing them, because a generated page changes only through its source, existing pages outside the plan keep their content, and an accepted record's content is never edited.
+6. **Report** the Docs Setup values, the pages created, anything left undocumented with the reason, and the writing-rule violations left unfixed.
 
 ### Framework comparison
 
