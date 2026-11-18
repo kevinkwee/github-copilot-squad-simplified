@@ -2,7 +2,7 @@
 
 This file provides guidance to AI coding agents when working with code in this repository.
 
-<!-- This is a template. Adapt it per project: fill in the placeholder comments, delete the sections the project does not need, and keep only the rules agents in that codebase must obey. Some rules carry Python-flavored examples (Ruff, pytest, Pydantic-style validation). Keep the principle, then adapt or drop whichever parts do not fit the language or tooling. -->
+<!-- This is a template. Adapt it per project: fill in the placeholder comments, and delete the sections and rules that have nothing in the project to apply to. Some rules carry Python-flavored examples (Ruff, pytest, Pydantic-style validation). Keep the principle, then adapt or drop whichever parts do not fit the language or tooling. -->
 
 ## Project Overview
 
@@ -32,7 +32,7 @@ When working inside a mapped folder, read and follow that folder's `AGENTS.md` i
 4. **Performance**: code is fast enough
 5. **Abstraction and reuse**: code is DRY
 
-<!-- Adapt the priority order and entries to the project (stability or backward compatibility can rank higher in framework-heavy or legacy codebases). -->
+<!-- Keep this order unless the team states a different one. Stability or backward compatibility can rank higher in framework-heavy or legacy codebases. -->
 
 ### Ground Rules
 
@@ -234,7 +234,7 @@ This structure can be updated as the project evolves. If you add new files or mo
 | **Helper** | Transform data, validate, format | Have side effects, do I/O, maintain state |
 | **External Client** | Communicate with external services | Contain business logic, access database |
 
-<!-- Adapt the layers above to the project's actual layering (e.g. framework controllers, ORM models). -->
+<!-- Rename, add, or drop layers to match the project's layering (e.g. framework controllers, ORM models), and keep what each remaining layer must not do unless the team states otherwise. -->
 
 ### Dependency Injection
 
@@ -599,11 +599,11 @@ npx vitest run tests/your_tests.test.ts --coverage
 
 ## Documentation
 
-Update `README.md` when you add new features, endpoints, or significant changes. Update this file (`AGENTS.md`) when you add new modules, classes, or change architecture. Both `README.md` and `AGENTS.md` must be kept in sync with the codebase. When the project declares a Docs Setup below, feature and behavior changes go to the docs pages instead, and `README.md` stays a short landing page that links to them.
+Update `README.md` when you add new features, endpoints, or significant changes. Update this file (`AGENTS.md`) when you add new modules, classes, or change architecture. Both `README.md` and `AGENTS.md` must be kept in sync with the codebase. When this section holds a `### Docs Setup` subsection, feature and behavior changes go to the docs pages instead, and `README.md` stays a short landing page that links to them.
 
 ### Docs Setup
 
-<!-- Delete this subsection unless the project has a docs site or docs folder that agents keep in step with the code. The project-docs skill fills these fields when it bootstraps the docs. -->
+<!-- The project-docs skill writes this subsection when it bootstraps the docs. Delete it until then. -->
 
 - Audiences: <!-- who reads the docs, for example developers who call the library, or end users plus the engineers who maintain the product -->
 - Page model: <!-- shared (each feature page carries a How it works topic for engineers, before any troubleshooting topics) or split (feature pages stay at the user's level, and the internals of each feature are engineering pages) -->
