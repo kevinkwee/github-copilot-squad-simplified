@@ -103,13 +103,13 @@ The applicable `AGENTS.md` file(s) and the Project Standards both apply. When th
   - **Write a comment only when really necessary.** Flag comments whose presence is not justified.
   - **Prefer code over comments.** Flag comments that can be replaced by a better function or variable name. A comment that exists only to compensate for a poor name is a failure to express yourself in code.
   - **Avoid section separator comments.** Flag section separator comments.
-- Docs, only when the root `AGENTS.md` declares a Docs Setup (a `### Docs Setup` subsection of its `## Documentation` section). Docs pages are the files under its docs root, its engineering root, and its decision records folder:
+- Docs, only when the root `AGENTS.md` declares a Docs Setup (a `### Docs Setup` subsection of its `## Documentation` section). Docs pages are the files under its docs root, its development root, and its decision records folder:
   - **Docs follow the change.** Flag a change that alters behavior, a flag or option, a contract (inputs, outputs, errors, permissions), or anything users see without updating the affected docs pages. Flag a new feature without a page, and a removed feature whose page, navigation entry, or links remain.
   - **The architecture map follows the change**, when the project has one. Flag a change that adds, removes, or renames a component, or changes how components connect or how data flows, without updating the architecture map.
   - **Every docs statement matches the code.** Check each changed docs statement, and each box and arrow of a changed diagram, against the code and tests. A statement or diagram the code does not support is a bug.
   - **Decision records stay enforced.** Read the accepted records in the decision records folder that concern the changed components. Flag a change that contradicts a record whose status is still `accepted`, even when New decision records is `off`. The change must supersede the record with a new one, set its status to `deprecated`, or be reworked to keep to the record. Flag an accepted record whose content was edited, since only its status line may change, and a new record or a deprecation that the implementation report does not mark as confirmed by the user.
-  - **User pages stay out of the engineering docs.** Flag a link from a user page, meaning a page under the docs root and outside the engineering root and the decision records folder, into either of them.
-  - **Repo-only links resolve.** No docs build covers repo-only engineering pages, so check the links in the changed ones by hand.
+  - **User pages stay out of the development docs.** Flag a link from a user page, meaning a page under the docs root and outside the development root and the decision records folder, into either of them.
+  - **Repo-only links resolve.** No docs build covers repo-only development pages, so check the links in the changed ones by hand.
   - **The docs build passes.** Run the Docs Setup build command when the docs changed, unless it is `none`.
   - **Docs prose follows the writing rules.** Review the prose of changed docs pages against the writing rules of `AGENTS.md`, the cold-reader and concise rules above, and these:
     - user pages use the names the product shows

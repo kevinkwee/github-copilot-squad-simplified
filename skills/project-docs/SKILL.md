@@ -1,6 +1,6 @@
 ---
 name: project-docs
-description: 'Bootstrap or update the user and engineering docs of a project, including its architecture map and decision records, so people can understand and use it without reading its code. Use when: asked to document a project or set up a docs site, a change alters behavior, a flag, a contract, components, or anything users see in a project whose AGENTS.md declares a Docs Setup, or a design decision comes up that may deserve a decision record.'
+description: 'Bootstrap or update the user and development docs of a project, including its architecture map and decision records, so people can understand and use it without reading its code. Use when: asked to document a project or set up a docs site, a change alters behavior, a flag, a contract, components, or anything users see in a project whose AGENTS.md declares a Docs Setup, or a design decision comes up that may deserve a decision record.'
 argument-hint: '[bootstrap | update]'
 license: MIT
 ---
@@ -16,8 +16,8 @@ Two modes:
 
 The docs have two areas:
 
-- **User docs**, under the docs root and outside the engineering root and the decision records folder: what the project does and how to use it.
-- **Engineering docs**: the architecture map and the split model's feature internals, under the engineering root, plus the decision records in their own folder. They are repo-only by default.
+- **User docs**, under the docs root and outside the development root and the decision records folder: what the project does and how to use it.
+- **Development docs**: the architecture map and the split model's feature internals, under the development root, plus the decision records in their own folder. They are repo-only by default.
 
 ## Docs Setup
 
@@ -29,22 +29,22 @@ A project declares its docs in a `### Docs Setup` subsection of the `## Document
 - Audiences: who reads the docs, for example developers who call the library, or end users plus the engineers who maintain the product.
 - Page model: `shared` or `split`.
 - Docs root: the folder that holds the user docs source, for example `docs/`.
-- Engineering root: the folder that holds the architecture map and, in the split model, the feature internals, for example `engineering/`.
-- Decision records: the folder that holds the decision records, for example `engineering/decisions/`. It stays set after an opt-out, because accepted records stay in force.
+- Development root: the folder that holds the architecture map and, in the split model, the feature internals, for example `development/`.
+- Decision records: the folder that holds the decision records, for example `development/decisions/`. It stays set after an opt-out, because accepted records stay in force.
 - New decision records: `on` or `off`. `off` stops proposing records for new decisions. A missing field means `on`.
 - Framework: the docs framework and its config file, or `markdown` for plain Markdown with no site.
 - Build command: the command that builds the docs and fails on broken links, or `none`.
 - Generated reference: each generated page with its source and the command that regenerates it, or `none`.
 ```
 
-Engineering docs are repo-only by default. They stay repo-only while the engineering root and the decision records folder sit outside the docs root, or while the framework config excludes them from the site build. Engineering docs inside the docs root without such an exclusion are published by the site.
+Development docs are repo-only by default. They stay repo-only while the development root and the decision records folder sit outside the docs root, or while the framework config excludes them from the site build. Development docs inside the docs root without such an exclusion are published by the site.
 
-A Docs Setup may lack the engineering fields. Without an Engineering root, the project has no architecture map, and split-model feature internals stay where its docs keep them. Without a Decision records field, the project has no decision records and proposes none. Rerunning bootstrap captures the existing docs setup and adds the missing fields once the user approves the plan.
+A Docs Setup may lack the development fields. Without a Development root, the project has no architecture map, and split-model feature internals stay where its docs keep them. Without a Decision records field, the project has no decision records and proposes none. Rerunning bootstrap captures the existing docs setup and adds the missing fields once the user approves the plan.
 
 Page models:
 
 - **shared**: each feature page carries a `How it works` topic for engineers, before any troubleshooting topics. Fits projects whose users are technical, such as libraries, CLIs, APIs, and developer tools.
-- **split**: feature pages stay at the user's level, and each feature's internals are a page in the engineering docs. Fits products whose end users are not technical, because the user asks how to complete a task while the engineer asks how the system behaves.
+- **split**: feature pages stay at the user's level, and each feature's internals are a page in the development docs. Fits products whose end users are not technical, because the user asks how to complete a task while the engineer asks how the system behaves.
 
 ## Shared rules (both modes)
 
@@ -53,7 +53,7 @@ Page models:
 - Never restate what the code already states, such as signatures, field lists, and configuration keys with their defaults. When the project has a source for that material (an OpenAPI spec, a schema, `--help` output), generate a reference page from it and link to it. Never hand-edit a generated page. Change its source and regenerate it.
 - Every statement must be checkable against the code or tests. Read the code behind a statement before writing it. Delete a statement you cannot verify instead of softening it.
 - Never put secrets, credentials, tokens, internal hostnames, or personal data in docs or examples. Use obvious placeholders.
-- User pages never link into the engineering docs. Engineering pages may link to user pages.
+- User pages never link into the development docs. Development pages may link to user pages.
 - `How it works` topics and pages explain behavior: the flow, invariants, and contracts. The reasons behind a design choice belong in its decision record.
 - Keep `README.md` a short landing page: what the project is, a quick start, and a link to the docs. Move content out of it only with the user's approval.
 - The writing rules of the project's `AGENTS.md` apply. Without such rules: no em-dashes, en-dashes, or other non-ASCII dashes, no ASCII hyphen as a clause separator, and periods or commas over semicolons and colons.
@@ -71,7 +71,7 @@ User docs:
 - **Tutorials**: only for a journey that spans several features.
 - **Reference**: generated or exhaustive lookup material.
 
-Engineering docs:
+Development docs:
 
 - **Architecture map**: one page, described below.
 - **Decision records**: one file per decision in the decision records folder, described below.
@@ -89,7 +89,7 @@ Feature pages follow the topic types of the GitLab documentation style guide. Ea
 
 ### Architecture map
 
-One page at the engineering root, mostly diagrams. Draw the diagrams as Mermaid code blocks, so they show in diffs and reviews and agents can update them, and structure them by the C4 model:
+One page at the development root, mostly diagrams. Draw the diagrams as Mermaid code blocks, so they show in diffs and reviews and agents can update them, and structure them by the C4 model:
 
 - a system context diagram: the system, its users, and the external systems it talks to
 - a container diagram: the apps, services, and data stores, and how they talk
@@ -117,7 +117,7 @@ A decision record captures one design decision that is expensive to reverse and 
 
 Run it only when the user asks, for example "document this project" or "set up docs". It is a large job, so it never starts as a side effect of another request.
 
-1. **Inspect the repo.** Find existing docs (a docs folder, a framework config such as `zensical.toml`, `mkdocs.yml`, a Docusaurus config, an Astro config that uses Starlight, or a Sphinx `conf.py`), existing engineering docs such as architecture pages and decision records (common folders are `docs/decisions/`, `docs/adr/`, and `doc/adr/`), `README.md` content that belongs in the docs, the stack and package manager, the surface users touch (commands, flags, routes, screens, public API, configuration), and reference sources (an OpenAPI spec, a schema, `--help` output).
+1. **Inspect the repo.** Find existing docs (a docs folder, a framework config such as `zensical.toml`, `mkdocs.yml`, a Docusaurus config, an Astro config that uses Starlight, or a Sphinx `conf.py`), existing development docs such as architecture pages and decision records (common folders are `docs/decisions/`, `docs/adr/`, and `doc/adr/`), `README.md` content that belongs in the docs, the stack and package manager, the surface users touch (commands, flags, routes, screens, public API, configuration), and reference sources (an OpenAPI spec, a schema, `--help` output).
 2. **Ask the user which framework to use**. Put the [framework comparison](#framework-comparison) and a recommendation for this project, with its reason, into the question, and ask for the audiences too when the repo does not show them. Pick the recommendation by the first case that matches:
    - **No docs**: follow the recommendation by stack below the comparison.
    - **Docs on a framework that is in maintenance mode or unmaintained, or has announced or reached its end of life**, such as Material for MkDocs: migrate to its successor, for example Zensical. Without a successor, follow the recommendation by stack.
@@ -125,27 +125,27 @@ Run it only when the user asks, for example "document this project" or "set up d
 
    The framework choice qualifies for a decision record, so the same question may offer to record it.
 3. **Plan** and present it before writing anything:
-   - the Docs Setup values, with the engineering root and the decision records folder outside the docs root unless the user wants them published
-   - for existing decision records or engineering pages inside the docs root, a choice between moving them out of the docs root and excluding them from the site build
+   - the Docs Setup values, with the development root and the decision records folder outside the docs root unless the user wants them published
+   - for existing decision records or development pages inside the docs root, a choice between moving them out of the docs root and excluding them from the site build
    - the feature list in the audience's vocabulary, and the user pages to create
-   - the engineering pages to create, listed apart from the user pages: the architecture map and, in the split model, one feature internals page per feature
+   - the development pages to create, listed apart from the user pages: the architecture map and, in the split model, one feature internals page per feature
    - the decision records to write: the framework choice record when the user asked for it, and past decisions the user supplies the reasoning for. The decision records folder is created together with its first record and is never empty
    - the framework config and its pinned dependencies (or the migration), with Mermaid enabled when published pages carry diagrams
    - any content to move out of `README.md`
    - the build command
 
    For existing docs, keep their layout and conventions, and plan only the missing pages. Write nothing until the user approves the plan.
-4. **Write** the framework config with the docs dependencies pinned in the project's lockfile or a pinned requirements file, then the user pages, the generated reference, the engineering pages, the planned decision records, and the Docs Setup subsection in the root `AGENTS.md`. Point the `## Architecture` section of that `AGENTS.md` to the architecture map instead of re-explaining the flows there.
+4. **Write** the framework config with the docs dependencies pinned in the project's lockfile or a pinned requirements file, then the user pages, the generated reference, the development pages, the planned decision records, and the Docs Setup subsection in the root `AGENTS.md`. Point the `## Architecture` section of that `AGENTS.md` to the architecture map instead of re-explaining the flows there.
 5. **Validate**, and fix what fails:
    - the build command passes
    - every statement, box, and arrow was checked against the code
-   - no user page links into the engineering docs
-   - no non-ASCII dashes remain and no ASCII hyphen separates clauses, where the writing rules that apply ban them (`rg -n '[\p{Pd}&&[^-]]'` and `rg -n '[^\s>|] -{1,3}(\s|$)'` across the docs root, the engineering root, and the decision records folder find no violations in the pages and records this run wrote by hand, except that a hit inside code or a math expression does not count as a violation). Report the violations in other files instead of fixing them, because a generated page changes only through its source, existing pages outside the plan keep their content, and an accepted record's content is never edited.
+   - no user page links into the development docs
+   - no non-ASCII dashes remain and no ASCII hyphen separates clauses, where the writing rules that apply ban them (`rg -n '[\p{Pd}&&[^-]]'` and `rg -n '[^\s>|] -{1,3}(\s|$)'` across the docs root, the development root, and the decision records folder find no violations in the pages and records this run wrote by hand, except that a hit inside code or a math expression does not count as a violation). Report the violations in other files instead of fixing them, because a generated page changes only through its source, existing pages outside the plan keep their content, and an accepted record's content is never edited.
 6. **Report** the Docs Setup values, the pages created, anything left undocumented with the reason, and the writing-rule violations left unfixed.
 
 ### Framework comparison
 
-The table reflects the state in November 2026. When web access is available, check the latest release and maintenance status of each candidate before recommending one. When web access is not available, say in the question that the table could not be checked. Repo-only engineering docs need no framework for their diagrams, because GitHub and GitLab render Mermaid code blocks.
+The table reflects the state in November 2026. When web access is available, check the latest release and maintenance status of each candidate before recommending one. When web access is not available, say in the question that the table could not be checked. Repo-only development docs need no framework for their diagrams, because GitHub and GitLab render Mermaid code blocks.
 
 | Framework | Build needs | Fits | Watch out for | Strict build | Mermaid diagrams |
 | --- | --- | --- | --- | --- | --- |
@@ -173,7 +173,7 @@ Run it inside the change itself, and only for a project with a Docs Setup. A req
    - Feature internals (split model) change when the flow, invariants, or contracts of a feature change.
    - Decision records change when the change settles a qualifying decision and New decision records is not `off` (ask first, as [Decision records](#decision-records) describes), or when the change contradicts an accepted record (the user picks a superseding record, a deprecation, or another approach that keeps to the record).
    - Nothing changes for refactors, renames that no page or diagram shows, and fixes that restore documented behavior.
-2. **Find the affected pages.** Search the docs root for the names users see that the change touches: commands, flags, options, endpoints, screens, error messages, and the feature name. Search the engineering root and the decision records folder for the components and technologies the change touches. Without an engineering root, search the pages where the docs keep feature internals instead.
+2. **Find the affected pages.** Search the docs root for the names users see that the change touches: commands, flags, options, endpoints, screens, error messages, and the feature name. Search the development root and the decision records folder for the components and technologies the change touches. Without a development root, search the pages where the docs keep feature internals instead.
 3. **Update** the affected pages. Add a page for a new feature. For a removed feature, delete its page, its navigation entry, and the links that pointed to it. Regenerate the reference pages whose source changed.
 4. **Build** with the build command unless it is `none`, and fix what fails.
 5. **Report** the docs impact: the pages changed, including the architecture map and decision records, or why no page needed a change. Mark each new decision record and each deprecation as confirmed by the user.

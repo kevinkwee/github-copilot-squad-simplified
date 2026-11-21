@@ -606,10 +606,10 @@ Update `README.md` when you add new features, endpoints, or significant changes.
 <!-- The project-docs skill writes this subsection when it bootstraps the docs. Delete it until then. -->
 
 - Audiences: <!-- who reads the docs, for example developers who call the library, or end users plus the engineers who maintain the product -->
-- Page model: <!-- shared (each feature page carries a How it works topic for engineers, before any troubleshooting topics) or split (feature pages stay at the user's level, and the internals of each feature are engineering pages) -->
+- Page model: <!-- shared (each feature page carries a How it works topic for engineers, before any troubleshooting topics) or split (feature pages stay at the user's level, and the internals of each feature live under the Development root) -->
 - Docs root: <!-- the folder that holds the user docs source, for example docs/ -->
-- Engineering root: <!-- the folder that holds the architecture map and, in the split model, the feature internals, for example engineering/. Repo-only by default, by sitting outside the docs root or being excluded from the site build -->
-- Decision records: <!-- the folder that holds the decision records, for example engineering/decisions/. Keep it set when New decision records is off, because accepted records stay in force -->
+- Development root: <!-- the folder that holds the architecture map and, in the split model, the feature internals, for example development/. Repo-only by default, by sitting outside the docs root or being excluded from the site build -->
+- Decision records: <!-- the folder that holds the decision records, for example development/decisions/. Keep it set when New decision records is off, because accepted records stay in force -->
 - New decision records: <!-- on, or off to stop proposing records for new decisions -->
 - Framework: <!-- the docs framework and its config file, or markdown for plain Markdown with no site -->
 - Build command: <!-- the command that builds the docs and fails on broken links, or none -->
